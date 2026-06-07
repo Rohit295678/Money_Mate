@@ -49,7 +49,7 @@ export default function BillsPage() {
   const [newBill, setNewBill] = useState({ title: "", amount: "", memberId: "" });
   const [showGroupForm, setShowGroupForm] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { format } = useCurrency();
+  const { format, symbol } = useCurrency();
 
   async function fetchGroups() {
     const res = await fetch("/api/groups");
@@ -197,7 +197,7 @@ export default function BillsPage() {
                       <input type="text" placeholder="Bill title" value={newBill.title}
                         onChange={(e) => setNewBill((p) => ({ ...p, title: e.target.value }))} required
                         className="flex-1 min-w-32 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
-                      <input type="number" step="0.01" placeholder="Amount ($)" value={newBill.amount}
+                      <input type="number" step="0.01" placeholder={`Amount (${symbol})`} value={newBill.amount}
                         onChange={(e) => setNewBill((p) => ({ ...p, amount: e.target.value }))} required
                         className="w-36 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
                       <select value={newBill.memberId} onChange={(e) => setNewBill((p) => ({ ...p, memberId: e.target.value }))} required

@@ -18,7 +18,7 @@ export default function DebtPage() {
   const [form, setForm] = useState({ name: "", totalAmount: "", interestRate: "", minimumPayment: "", dueDate: "" });
   const [payment, setPayment] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
-  const { format } = useCurrency();
+  const { format, symbol } = useCurrency();
 
   async function fetchDebts() {
     const res = await fetch("/api/debts");
@@ -80,9 +80,9 @@ export default function DebtPage() {
           <form onSubmit={addDebt} className="space-y-3">
             {[
               { key: "name", label: "Debt name", placeholder: "e.g. Credit Card", type: "text" },
-              { key: "totalAmount", label: "Total amount ($)", placeholder: "5000", type: "number" },
+              { key: "totalAmount", label: `Total amount (${symbol})`, placeholder: "5000", type: "number" },
               { key: "interestRate", label: "Interest rate (%)", placeholder: "18.9", type: "number" },
-              { key: "minimumPayment", label: "Minimum payment ($)", placeholder: "100", type: "number" },
+              { key: "minimumPayment", label: `Minimum payment (${symbol})`, placeholder: "100", type: "number" },
             ].map(({ key, label, placeholder, type }) => (
               <div key={key}>
                 <label className="text-xs text-gray-500 block mb-1">{label}</label>
@@ -135,7 +135,7 @@ export default function DebtPage() {
                     <div className="h-2 rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
                   </div>
                   <div className="flex gap-2">
-                    <input type="number" step="0.01" placeholder="Payment amount ($)"
+                    <input type="number" step="0.01" placeholder={`Payment amount (${symbol})`}
                       value={payment[d.id] ?? ""}
                       onChange={(e) => setPayment((p) => ({ ...p, [d.id]: e.target.value }))}
                       className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />

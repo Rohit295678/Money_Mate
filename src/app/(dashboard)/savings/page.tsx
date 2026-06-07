@@ -16,7 +16,7 @@ export default function SavingsPage() {
   const [form, setForm] = useState({ name: "", targetAmount: "", deadline: "" });
   const [contrib, setContrib] = useState<Record<string, { amount: string; note: string }>>({});
   const [loading, setLoading] = useState(false);
-  const { format } = useCurrency();
+  const { format, symbol } = useCurrency();
 
   async function fetchGoals() {
     const res = await fetch("/api/savings");
@@ -69,7 +69,7 @@ export default function SavingsPage() {
             <input type="text" placeholder="Goal name (e.g. Emergency Fund)" value={form.name}
               onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} required
               className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
-            <input type="number" step="0.01" placeholder="Target amount ($)" value={form.targetAmount}
+            <input type="number" step="0.01" placeholder={`Target amount (${symbol})`} value={form.targetAmount}
               onChange={(e) => setForm((p) => ({ ...p, targetAmount: e.target.value }))} required
               className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
             <div>
@@ -114,7 +114,7 @@ export default function SavingsPage() {
                     <div className="h-2 rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
                   </div>
                   <div className="flex gap-2">
-                    <input type="number" step="0.01" placeholder="Add amount ($)" value={c.amount}
+                    <input type="number" step="0.01" placeholder={`Add amount (${symbol})`} value={c.amount}
                       onChange={(e) => setContrib((p) => ({ ...p, [g.id]: { ...c, amount: e.target.value } }))}
                       className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
                     <input type="text" placeholder="Note" value={c.note}

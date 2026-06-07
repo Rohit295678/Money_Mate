@@ -18,7 +18,7 @@ export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [form, setForm] = useState({ amount: "", category: EXPENSE_CATEGORIES[0], description: "", date: "" });
   const [loading, setLoading] = useState(false);
-  const { format } = useCurrency();
+  const { format, symbol } = useCurrency();
 
   async function fetchExpenses() {
     const res = await fetch(`/api/expenses?month=${month}&year=${year}`);
@@ -77,7 +77,7 @@ export default function ExpensesPage() {
         <div className="lg:col-span-1 bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <h3 className="text-lg font-semibold text-gray-800 mb-4">Add Expense</h3>
           <form onSubmit={addExpense} className="space-y-3">
-            <input type="number" step="0.01" placeholder="Amount ($)" value={form.amount}
+            <input type="number" step="0.01" placeholder={`Amount (${symbol})`} value={form.amount}
               onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))} required
               className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
             <select value={form.category} onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))}

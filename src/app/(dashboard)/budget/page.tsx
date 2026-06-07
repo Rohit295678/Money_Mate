@@ -14,7 +14,7 @@ export default function BudgetPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [form, setForm] = useState({ category: EXPENSE_CATEGORIES[0], limit: "" });
   const [loading, setLoading] = useState(false);
-  const { format } = useCurrency();
+  const { format, symbol } = useCurrency();
 
   async function fetchData() {
     const [bRes, eRes] = await Promise.all([
@@ -77,7 +77,7 @@ export default function BudgetPage() {
               className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400">
               {EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
             </select>
-            <input type="number" step="0.01" placeholder="Monthly limit ($)" value={form.limit}
+            <input type="number" step="0.01" placeholder={`Monthly limit (${symbol})`} value={form.limit}
               onChange={(e) => setForm((p) => ({ ...p, limit: e.target.value }))} required
               className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
             <button type="submit" disabled={loading}

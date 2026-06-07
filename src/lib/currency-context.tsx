@@ -1,17 +1,19 @@
 "use client";
 import { createContext, useContext, useEffect, useState } from "react";
-import { CurrencyCode, formatCurrency as fmt } from "@/lib/utils";
+import { CurrencyCode, CURRENCIES, formatCurrency as fmt } from "@/lib/utils";
 
 const LS_KEY = "moneymate-currency";
 
 interface CurrencyCtx {
   currency: CurrencyCode;
+  symbol: string;
   setCurrency: (c: CurrencyCode) => void;
   format: (amount: number) => string;
 }
 
 const CurrencyContext = createContext<CurrencyCtx>({
   currency: "USD",
+  symbol: "$",
   setCurrency: () => {},
   format: (n) => fmt(n, "USD"),
 });
@@ -30,8 +32,10 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(LS_KEY, c);
   }
 
+  const symbol = CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency;
+
   return (
-    <CurrencyContext.Provider value={{ currency, setCurrency, format: (n) => fmt(n, currency) }}>
+    <CurrencyContext.Provider value={{ currency, symbol, setCurrency, format: (n) => fmt(n, currency) }}>
       {children}
     </CurrencyContext.Provider>
   );
