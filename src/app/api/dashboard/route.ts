@@ -3,18 +3,20 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 
-export async function GET() {
+export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const { searchParams } = new URL(req.url);
+  const now = new Date();
+  const month = Number(searchParams.get("month") ?? now.getMonth() + 1);
+  const year = Number(searchParams.get("year") ?? now.getFullYear());
+
   const db = getDb();
   const userId = session.user.id;
-  const now = new Date();
-  const month = now.getMonth() + 1;
-  const year = now.getFullYear();
   const start = `${year}-${String(month).padStart(2, "0")}-01`;
   const daysInMonth = new Date(year, month, 0).getDate();
-  const end = `${year}-${String(month).padStart(2, "0")}-${daysInMonth} 23:59:59`;
+  const end = `${year}-${String(month).padStart(2, "0")}-${String(daysInMonth).padStart(2, "0")} 23:59:59`;
 
   const expenses = db
     .prepare("SELECT * FROM expenses WHERE user_id = ? AND date >= ? AND date <= ? ORDER BY date DESC")
@@ -24,6 +26,7 @@ export async function GET() {
     .prepare("SELECT limit_amount FROM budgets WHERE user_id = ? AND month = ? AND year = ?")
     .all(userId, month, year) as { limit_amount: number }[];
 
+  // Savings + debt are all-time totals — not month-specific
   const goals = db
     .prepare("SELECT current_amount FROM savings_goals WHERE user_id = ?")
     .all(userId) as { current_amount: number }[];

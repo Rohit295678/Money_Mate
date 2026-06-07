@@ -11,20 +11,55 @@ interface DashboardData {
   recentExpenses: { id: string; amount: number; category: string; description: string | null; date: string }[];
 }
 
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const CURRENT_YEAR = new Date().getFullYear();
+const YEARS = [CURRENT_YEAR - 2, CURRENT_YEAR - 1, CURRENT_YEAR, CURRENT_YEAR + 1];
+
 export default function DashboardPage() {
   const { format } = useCurrency();
+  const now = new Date();
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [year, setYear] = useState(now.getFullYear());
   const [data, setData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    fetch("/api/dashboard").then((r) => r.json()).then(setData);
-  }, []);
+    setLoading(true);
+    setData(null);
+    fetch(`/api/dashboard?month=${month}&year=${year}`)
+      .then((r) => r.json())
+      .then((d) => { setData(d); setLoading(false); });
+  }, [month, year]);
+
+  const selectedLabel = `${MONTHS[month - 1]} ${year}`;
+  const isCurrentMonth = month === now.getMonth() + 1 && year === now.getFullYear();
 
   const cards = data
     ? [
-        { label: "Spent This Month", value: format(data.totalSpent), color: "text-red-600", bg: "bg-red-50" },
-        { label: "Total Budget", value: format(data.totalBudget), color: "text-blue-600", bg: "bg-blue-50" },
-        { label: "Total Saved", value: format(data.totalSaved), color: "text-emerald-600", bg: "bg-emerald-50" },
-        { label: "Total Debt Left", value: format(data.totalDebt), color: "text-orange-600", bg: "bg-orange-50" },
+        {
+          label: `Spent in ${selectedLabel}`,
+          value: format(data.totalSpent),
+          color: "text-red-600",
+          bg: "bg-red-50",
+        },
+        {
+          label: `Budget in ${selectedLabel}`,
+          value: format(data.totalBudget),
+          color: "text-blue-600",
+          bg: "bg-blue-50",
+        },
+        {
+          label: "Total Saved (all time)",
+          value: format(data.totalSaved),
+          color: "text-emerald-600",
+          bg: "bg-emerald-50",
+        },
+        {
+          label: "Total Debt Remaining",
+          value: format(data.totalDebt),
+          color: "text-orange-600",
+          bg: "bg-orange-50",
+        },
       ]
     : [];
 
@@ -38,26 +73,66 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-800">Overview</h2>
-        <p className="text-gray-500 text-sm mt-1">
-          {new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-800">Overview</h2>
+          <p className="text-gray-500 text-sm mt-1">
+            Showing data for{" "}
+            <span className="font-semibold text-gray-700">{selectedLabel}</span>
+            {isCurrentMonth && (
+              <span className="ml-2 text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">
+                Current month
+              </span>
+            )}
+          </p>
+        </div>
+
+        {/* Month / Year pickers */}
+        <div className="flex gap-2 shrink-0">
+          <select
+            value={month}
+            onChange={(e) => setMonth(Number(e.target.value))}
+            className="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-white"
+          >
+            {MONTHS.map((m, i) => (
+              <option key={m} value={i + 1}>{m}</option>
+            ))}
+          </select>
+          <select
+            value={year}
+            onChange={(e) => setYear(Number(e.target.value))}
+            className="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-white"
+          >
+            {YEARS.map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+          {!isCurrentMonth && (
+            <button
+              onClick={() => { setMonth(now.getMonth() + 1); setYear(now.getFullYear()); }}
+              className="px-3 py-2 text-sm text-emerald-600 border border-emerald-200 rounded-xl hover:bg-emerald-50 transition"
+            >
+              Today
+            </button>
+          )}
+        </div>
       </div>
 
+      {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {data
-          ? cards.map(({ label, value, color, bg }) => (
+        {loading || !data
+          ? Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="rounded-2xl p-5 bg-gray-100 animate-pulse h-20" />
+            ))
+          : cards.map(({ label, value, color, bg }) => (
               <div key={label} className={`rounded-2xl p-5 ${bg}`}>
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</p>
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide leading-tight">{label}</p>
                 <p className={`text-2xl font-bold mt-1 ${color}`}>{value}</p>
               </div>
-            ))
-          : Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="rounded-2xl p-5 bg-gray-100 animate-pulse h-20" />
             ))}
       </div>
 
+      {/* Quick Actions */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <h3 className="text-lg font-semibold text-gray-800 mb-4">Quick Actions</h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -71,19 +146,25 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Recent Expenses */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-800">Recent Expenses</h3>
+          <h3 className="text-lg font-semibold text-gray-800">
+            Recent Expenses
+            <span className="ml-2 text-sm font-normal text-gray-400">({selectedLabel})</span>
+          </h3>
           <Link href="/expenses" className="text-sm text-emerald-600 hover:underline">View all</Link>
         </div>
-        {!data ? (
+        {loading || !data ? (
           <div className="space-y-3">
             {Array.from({ length: 3 }).map((_, i) => (
               <div key={i} className="h-10 rounded-xl bg-gray-100 animate-pulse" />
             ))}
           </div>
         ) : data.recentExpenses.length === 0 ? (
-          <p className="text-gray-400 text-sm py-6 text-center">No expenses yet this month.</p>
+          <p className="text-gray-400 text-sm py-6 text-center">
+            No expenses recorded for {selectedLabel}.
+          </p>
         ) : (
           <div className="divide-y divide-gray-50">
             {data.recentExpenses.map((e) => (
