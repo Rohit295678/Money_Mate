@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { EXPENSE_CATEGORIES, getProgressColor } from "@/lib/utils";
 import { useCurrency } from "@/lib/currency-context";
 
-interface Budget { id: string; category: string; limit: number; month: number; year: number }
+interface Budget { id: string; category: string; limit_amount: number; month: number; year: number }
 interface Expense { amount: number; category: string }
 
 export default function BudgetPage() {
@@ -96,14 +96,14 @@ export default function BudgetPage() {
           ) : (
             budgets.map((b) => {
               const spent = spentByCategory(b.category);
-              const pct = Math.min((spent / b.limit) * 100, 100);
+              const pct = Math.min((spent / b.limit_amount) * 100, 100);
               return (
                 <div key={b.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
                   <div className="flex items-center justify-between mb-3">
                     <div>
                       <p className="font-semibold text-gray-800">{b.category}</p>
                       <p className="text-xs text-gray-400">
-                        {format(spent)} of {format(b.limit)} used
+                        {format(spent)} of {format(b.limit_amount)} used
                       </p>
                     </div>
                     <div className="flex items-center gap-3">
@@ -119,7 +119,7 @@ export default function BudgetPage() {
                       style={{ width: `${pct}%` }} />
                   </div>
                   {pct >= 100 && (
-                    <p className="text-xs text-red-500 mt-2 font-medium">Over budget by {format(spent - b.limit)}</p>
+                    <p className="text-xs text-red-500 mt-2 font-medium">Over budget by {format(spent - b.limit_amount)}</p>
                   )}
                 </div>
               );
