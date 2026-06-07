@@ -174,6 +174,12 @@ export default function BillsPage() {
     fetchGroups();
   }
 
+  async function deleteBill(billId: string) {
+    if (!selected) return;
+    await fetch(`/api/groups/${selected}/bills?billId=${billId}`, { method: "DELETE" });
+    fetchGroups();
+  }
+
   const group = groups.find((g) => g.id === selected);
   const balances = group ? calcBalances(group) : [];
   const memberName = (id: string) => group?.members.find((m) => m.id === id)?.name ?? id;
@@ -280,13 +286,27 @@ export default function BillsPage() {
                         <p className="text-gray-400 text-sm py-8 text-center">No bills yet. Add the first one!</p>
                       )}
                       {group.bills.map((b) => (
-                        <div key={b.id} className="py-3">
-                          <div className="flex justify-between mb-2">
+                        <div key={b.id} className="py-3 group/bill">
+                          <div className="flex justify-between items-start mb-2">
                             <div>
                               <p className="font-medium text-sm text-gray-800">{b.title}</p>
                               <p className="text-xs text-gray-400">Paid by {b.paidBy.name}</p>
                             </div>
-                            <p className="font-semibold text-gray-800">{format(b.amount)}</p>
+                            <div className="flex items-center gap-3">
+                              <p className="font-semibold text-gray-800">{format(b.amount)}</p>
+                              <button
+                                onClick={() => deleteBill(b.id)}
+                                title="Delete bill"
+                                className="opacity-0 group-hover/bill:opacity-100 p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <polyline points="3 6 5 6 21 6" strokeWidth="2" />
+                                  <path d="M19 6l-1 14H6L5 6" strokeWidth="2" />
+                                  <path d="M10 11v6M14 11v6" strokeWidth="2" />
+                                  <path d="M9 6V4h6v2" strokeWidth="2" />
+                                </svg>
+                              </button>
+                            </div>
                           </div>
                           <div className="space-y-1">
                             {b.splits.map((s) => (

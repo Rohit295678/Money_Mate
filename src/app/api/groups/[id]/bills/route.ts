@@ -65,3 +65,26 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   db.prepare("UPDATE bill_splits SET settled = 1 WHERE id = ?").run(splitId);
   return NextResponse.json({ success: true });
 }
+
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id: groupId } = await params;
+  const { searchParams } = new URL(req.url);
+  const billId = searchParams.get("billId");
+  if (!billId) return NextResponse.json({ error: "billId required" }, { status: 400 });
+
+  const db = getDb();
+  // Verify the bill belongs to a group owned by this user
+  const bill = db
+    .prepare(
+      "SELECT b.id FROM bills b JOIN bill_groups g ON b.group_id = g.id WHERE b.id = ? AND b.group_id = ? AND g.user_id = ?"
+    )
+    .get(billId, groupId, session.user.id);
+  if (!bill) return NextResponse.json({ error: "Bill not found" }, { status: 404 });
+
+  // ON DELETE CASCADE removes bill_splits automatically
+  db.prepare("DELETE FROM bills WHERE id = ?").run(billId);
+  return NextResponse.json({ success: true });
+}
