@@ -11,9 +11,15 @@ function calcBalances(group: Group): { from: string; to: string; amount: number 
   const net: Record<string, number> = {};
   group.members.forEach((m) => (net[m.id] = 0));
   group.bills.forEach((b) => {
-    net[b.paidBy.id] = (net[b.paidBy.id] ?? 0) + b.amount;
+    // Credit the payer only for each unsettled split they're owed.
+    // Settled splits are already paid back — don't count them.
     b.splits.forEach((s) => {
-      if (!s.settled && s.member) net[s.member.id] = (net[s.member.id] ?? 0) - s.amount;
+      if (!s.member) return;
+      if (!s.settled) {
+        // Payer is owed this amount; member owes this amount.
+        net[b.paidBy.id] = (net[b.paidBy.id] ?? 0) + s.amount;
+        net[s.member.id] = (net[s.member.id] ?? 0) - s.amount;
+      }
     });
   });
 
