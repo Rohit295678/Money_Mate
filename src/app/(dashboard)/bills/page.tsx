@@ -84,6 +84,14 @@ export default function BillsPage() {
     fetchGroups();
   }
 
+  async function deleteGroup(groupId: string, groupName: string) {
+    if (!confirm(`Delete group "${groupName}" and all its bills? This cannot be undone.`)) return;
+    await fetch(`/api/groups?id=${groupId}`, { method: "DELETE" });
+    // If the deleted group was selected, clear selection
+    if (selected === groupId) setSelected(null);
+    fetchGroups();
+  }
+
   async function settleSplit(splitId: string) {
     if (!selected) return;
     await fetch(`/api/groups/${selected}/bills`, {
@@ -138,11 +146,29 @@ export default function BillsPage() {
           <div className="space-y-2">
             <p className="text-xs text-gray-400 uppercase tracking-wide px-2">Your Groups</p>
             {groups.map((g) => (
-              <button key={g.id} onClick={() => setSelected(g.id)}
-                className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition ${selected === g.id ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-white text-gray-700 border border-gray-100 hover:bg-gray-50"}`}>
-                {g.name}
-                <span className="block text-xs text-gray-400">{g.members.length} members</span>
-              </button>
+              <div key={g.id} className="flex items-center gap-1 group/item">
+                <button onClick={() => setSelected(g.id)}
+                  className={`flex-1 text-left px-4 py-3 rounded-xl text-sm font-medium transition ${
+                    selected === g.id
+                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                      : "bg-white text-gray-700 border border-gray-100 hover:bg-gray-50"
+                  }`}>
+                  {g.name}
+                  <span className="block text-xs text-gray-400">{g.members.length} members</span>
+                </button>
+                <button
+                  onClick={() => deleteGroup(g.id, g.name)}
+                  title="Delete group"
+                  className="opacity-0 group-hover/item:opacity-100 p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition shrink-0"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <polyline points="3 6 5 6 21 6" strokeWidth="2" />
+                    <path d="M19 6l-1 14H6L5 6" strokeWidth="2" />
+                    <path d="M10 11v6M14 11v6" strokeWidth="2" />
+                    <path d="M9 6V4h6v2" strokeWidth="2" />
+                  </svg>
+                </button>
+              </div>
             ))}
           </div>
 

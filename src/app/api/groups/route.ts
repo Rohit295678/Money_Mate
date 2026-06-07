@@ -54,3 +54,23 @@ export async function POST(req: Request) {
   const memberRows = db.prepare("SELECT * FROM members WHERE group_id = ?").all(groupId);
   return NextResponse.json({ ...group, members: memberRows, bills: [] }, { status: 201 });
 }
+
+export async function DELETE(req: Request) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { searchParams } = new URL(req.url);
+  const id = searchParams.get("id");
+  if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
+
+  const db = getDb();
+  // Verify ownership before deleting
+  const group = db
+    .prepare("SELECT id FROM bill_groups WHERE id = ? AND user_id = ?")
+    .get(id, session.user.id);
+  if (!group) return NextResponse.json({ error: "Group not found" }, { status: 404 });
+
+  // ON DELETE CASCADE handles members, bills, and bill_splits automatically
+  db.prepare("DELETE FROM bill_groups WHERE id = ?").run(id);
+  return NextResponse.json({ success: true });
+}
