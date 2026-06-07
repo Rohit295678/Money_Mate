@@ -58,16 +58,30 @@ const ICONS: Record<string, React.ReactNode> = {
   ),
 };
 
-export default function Sidebar() {
+export default function Sidebar({ onClose }: { onClose?: () => void }) {
   const pathname = usePathname();
   const { data: session } = useSession();
   const { currency, setCurrency } = useCurrency();
 
   return (
     <aside className="w-64 shrink-0 bg-white border-r border-gray-100 flex flex-col h-screen sticky top-0">
-      <div className="p-6 border-b border-gray-100">
-        <h1 className="text-xl font-bold text-emerald-600">MoneyMate</h1>
-        <p className="text-xs text-gray-400 mt-1">Personal Finance Hub</p>
+      <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-emerald-600">MoneyMate</h1>
+          <p className="text-xs text-gray-400 mt-1">Personal Finance Hub</p>
+        </div>
+        {onClose && (
+          <button
+            onClick={onClose}
+            aria-label="Close menu"
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition lg:hidden"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <line x1="18" y1="6" x2="6" y2="18" strokeWidth="2" strokeLinecap="round" />
+              <line x1="6" y1="6" x2="18" y2="18" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </button>
+        )}
       </div>
 
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
