@@ -1,6 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useCurrency } from "@/lib/currency-context";
+import dynamic from "next/dynamic";
+
+const BillCharts = dynamic(() => import("@/components/charts/BillCharts"), { ssr: false });
 
 interface Member { id: string; name: string; email: string | null }
 interface Split { id: string; member_id: string; amount: number; settled: boolean; member: Member }
@@ -264,6 +267,9 @@ export default function BillsPage() {
                   </div>
                 )}
               </div>
+
+              {/* Charts — spending per bill + member breakdown */}
+              {group.bills.length > 0 && <BillCharts group={group} />}
             </div>
           )}
         </div>
