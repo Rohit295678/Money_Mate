@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { EXPENSE_CATEGORIES, CATEGORY_COLORS } from "@/lib/utils";
 import { useCurrency } from "@/lib/currency-context";
+import CategorySelect from "@/components/ui/CategorySelect";
 
 interface Expense {
   id: string;
@@ -47,8 +48,9 @@ export default function ExpensesPage() {
   }
 
   const total = expenses.reduce((s, e) => s + e.amount, 0);
-  const byCategory = EXPENSE_CATEGORIES.reduce<Record<string, number>>((acc, cat) => {
-    acc[cat] = expenses.filter((e) => e.category === cat).reduce((s, e) => s + e.amount, 0);
+  // Build byCategory from actual expense data so custom categories are included
+  const byCategory = expenses.reduce<Record<string, number>>((acc, e) => {
+    acc[e.category] = (acc[e.category] ?? 0) + e.amount;
     return acc;
   }, {});
 
@@ -80,10 +82,10 @@ export default function ExpensesPage() {
             <input type="number" step="0.01" placeholder={`Amount (${symbol})`} value={form.amount}
               onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))} required
               className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
-            <select value={form.category} onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400">
-              {EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-            </select>
+            <CategorySelect
+              value={form.category}
+              onChange={(val) => setForm((p) => ({ ...p, category: val }))}
+            />
             <input type="text" placeholder="Description (optional)" value={form.description}
               onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
@@ -98,13 +100,13 @@ export default function ExpensesPage() {
           <div className="mt-6 pt-4 border-t border-gray-100">
             <p className="text-xs text-gray-400 uppercase tracking-wide mb-3">By Category</p>
             <div className="space-y-2">
-              {EXPENSE_CATEGORIES.filter((c) => byCategory[c] > 0).map((c) => (
+              {Object.entries(byCategory).filter(([, v]) => v > 0).map(([c, amount]) => (
                 <div key={c} className="flex justify-between items-center text-sm">
                   <span className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full" style={{ background: CATEGORY_COLORS[c] }} />
                     {c}
                   </span>
-                  <span className="font-medium">{format(byCategory[c])}</span>
+                  <span className="font-medium">{format(amount)}</span>
                 </div>
               ))}
             </div>

@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { EXPENSE_CATEGORIES, getProgressColor } from "@/lib/utils";
 import { useCurrency } from "@/lib/currency-context";
+import CategorySelect from "@/components/ui/CategorySelect";
 
 interface Budget { id: string; category: string; limit_amount: number; month: number; year: number }
 interface Expense { amount: number; category: string }
@@ -73,10 +74,10 @@ export default function BudgetPage() {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <h3 className="text-lg font-semibold text-gray-800 mb-4">Set Budget</h3>
           <form onSubmit={upsertBudget} className="space-y-3">
-            <select value={form.category} onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400">
-              {EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-            </select>
+            <CategorySelect
+              value={form.category}
+              onChange={(val) => setForm((p) => ({ ...p, category: val }))}
+            />
             <input type="number" step="0.01" placeholder={`Monthly limit (${symbol})`} value={form.limit}
               onChange={(e) => setForm((p) => ({ ...p, limit: e.target.value }))} required
               className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
