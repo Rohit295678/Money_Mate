@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { formatCurrency } from "@/lib/utils";
 
 interface Member { id: string; name: string; email: string | null }
-interface Split { id: string; memberId: string; amount: number; settled: boolean; member: Member }
+interface Split { id: string; member_id: string; amount: number; settled: boolean; member: Member }
 interface Bill { id: string; title: string; amount: number; date: string; paidBy: Member; splits: Split[] }
 interface Group { id: string; name: string; members: Member[]; bills: Bill[] }
 
@@ -13,7 +13,7 @@ function calcBalances(group: Group): { from: string; to: string; amount: number 
   group.bills.forEach((b) => {
     net[b.paidBy.id] = (net[b.paidBy.id] ?? 0) + b.amount;
     b.splits.forEach((s) => {
-      if (!s.settled) net[s.memberId] = (net[s.memberId] ?? 0) - s.amount;
+      if (!s.settled && s.member) net[s.member.id] = (net[s.member.id] ?? 0) - s.amount;
     });
   });
 
