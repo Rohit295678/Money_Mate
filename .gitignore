@@ -4,3 +4,7 @@ node_modules
 .next
 prisma/*.db
 prisma/*.db-journal
+prisma/*.db-shm
+prisma/*.db-wal
+.DS_Store
+**/.DS_Store

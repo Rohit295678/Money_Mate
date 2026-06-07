@@ -1,36 +1,54 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MoneyMate
+
+A personal finance web app built with Next.js 16, TypeScript, Tailwind CSS, and SQLite.
+
+## Features
+
+- **Expense Tracker** — log and categorize spending with custom categories
+- **Budget Planner** — set monthly limits per category with progress tracking
+- **Bill Splitter** — split bills among friends with automatic settle-up calculation
+- **Savings Goals** — set targets, track contributions, visualize progress
+- **Debt Payoff Planner** — track debts with payment history
+- **Charts** — spending breakdown (donut) + budget vs actual (bar) on the overview
+- **Multi-currency** — 15 currencies, persisted to localStorage
+- **Mobile responsive** — hamburger drawer on small screens
+
+## Tech Stack
+
+| Layer | Choice |
+|---|---|
+| Framework | Next.js 16 (App Router) |
+| Language | TypeScript |
+| Styling | Tailwind CSS v4 |
+| Database | SQLite via `better-sqlite3` |
+| Auth | NextAuth.js v4 (JWT) |
+| Charts | Recharts |
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+# Install dependencies
+npm install
+
+# Start the dev server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) and register an account.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+The SQLite database (`prisma/dev.db`) is created automatically on first run — no migrations needed.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Environment Variables
 
-## Learn More
+Create a `.env` file in the root:
 
-To learn more about Next.js, take a look at the following resources:
+```env
+DATABASE_URL="file:./dev.db"
+NEXTAUTH_SECRET="your-secret-here"
+NEXTAUTH_URL="http://localhost:3000"
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Generate a strong secret with:
+```bash
+openssl rand -base64 32
+```
