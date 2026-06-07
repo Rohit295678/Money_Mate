@@ -2,6 +2,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
+import { useCurrency } from "@/lib/currency-context";
+import { CURRENCIES } from "@/lib/utils";
 
 const NAV = [
   { href: "/dashboard", label: "Overview", icon: "grid" },
@@ -59,6 +61,7 @@ const ICONS: Record<string, React.ReactNode> = {
 export default function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const { currency, setCurrency } = useCurrency();
 
   return (
     <aside className="w-64 shrink-0 bg-white border-r border-gray-100 flex flex-col h-screen sticky top-0">
@@ -88,6 +91,20 @@ export default function Sidebar() {
       </nav>
 
       <div className="p-4 border-t border-gray-100">
+        <div className="px-3 mb-3">
+          <label className="text-xs text-gray-400 uppercase tracking-wide block mb-1">Currency</label>
+          <select
+            value={currency}
+            onChange={(e) => setCurrency(e.target.value as typeof currency)}
+            className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-white"
+          >
+            {CURRENCIES.map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.symbol} {c.code} — {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="flex items-center gap-3 px-3 py-2 mb-2">
           <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-semibold text-sm">
             {session?.user?.name?.[0]?.toUpperCase() ?? session?.user?.email?.[0]?.toUpperCase() ?? "U"}

@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
-import { EXPENSE_CATEGORIES, formatCurrency, getProgressColor } from "@/lib/utils";
+import { EXPENSE_CATEGORIES, getProgressColor } from "@/lib/utils";
+import { useCurrency } from "@/lib/currency-context";
 
 interface Budget { id: string; category: string; limit: number; month: number; year: number }
 interface Expense { amount: number; category: string }
@@ -13,6 +14,7 @@ export default function BudgetPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [form, setForm] = useState({ category: EXPENSE_CATEGORIES[0], limit: "" });
   const [loading, setLoading] = useState(false);
+  const { format } = useCurrency();
 
   async function fetchData() {
     const [bRes, eRes] = await Promise.all([
@@ -101,7 +103,7 @@ export default function BudgetPage() {
                     <div>
                       <p className="font-semibold text-gray-800">{b.category}</p>
                       <p className="text-xs text-gray-400">
-                        {formatCurrency(spent)} of {formatCurrency(b.limit)} used
+                        {format(spent)} of {format(b.limit)} used
                       </p>
                     </div>
                     <div className="flex items-center gap-3">
@@ -117,7 +119,7 @@ export default function BudgetPage() {
                       style={{ width: `${pct}%` }} />
                   </div>
                   {pct >= 100 && (
-                    <p className="text-xs text-red-500 mt-2 font-medium">Over budget by {formatCurrency(spent - b.limit)}</p>
+                    <p className="text-xs text-red-500 mt-2 font-medium">Over budget by {format(spent - b.limit)}</p>
                   )}
                 </div>
               );

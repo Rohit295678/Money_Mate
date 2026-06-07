@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { formatCurrency } from "@/lib/utils";
+import { useCurrency } from "@/lib/currency-context";
 
 interface Goal {
   id: string;
@@ -16,6 +16,7 @@ export default function SavingsPage() {
   const [form, setForm] = useState({ name: "", targetAmount: "", deadline: "" });
   const [contrib, setContrib] = useState<Record<string, { amount: string; note: string }>>({});
   const [loading, setLoading] = useState(false);
+  const { format } = useCurrency();
 
   async function fetchGoals() {
     const res = await fetch("/api/savings");
@@ -98,7 +99,7 @@ export default function SavingsPage() {
                     <div>
                       <p className="font-semibold text-gray-800">{g.name}</p>
                       <p className="text-xs text-gray-400">
-                        {formatCurrency(g.currentAmount)} saved of {formatCurrency(g.targetAmount)}
+                        {format(g.currentAmount)} saved of {format(g.targetAmount)}
                       </p>
                       {g.deadline && (
                         <p className="text-xs text-gray-400">Deadline: {new Date(g.deadline).toLocaleDateString()}</p>
@@ -128,7 +129,7 @@ export default function SavingsPage() {
                     <div className="mt-3 space-y-1">
                       {g.contributions.map((c) => (
                         <div key={c.id} className="text-xs text-gray-400 flex justify-between">
-                          <span>+{formatCurrency(c.amount)} {c.note ? `— ${c.note}` : ""}</span>
+                          <span>+{format(c.amount)} {c.note ? `— ${c.note}` : ""}</span>
                           <span>{new Date(c.date).toLocaleDateString()}</span>
                         </div>
                       ))}

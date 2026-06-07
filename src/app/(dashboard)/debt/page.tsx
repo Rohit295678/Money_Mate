@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { formatCurrency } from "@/lib/utils";
+import { useCurrency } from "@/lib/currency-context";
 
 interface Debt {
   id: string;
@@ -18,6 +18,7 @@ export default function DebtPage() {
   const [form, setForm] = useState({ name: "", totalAmount: "", interestRate: "", minimumPayment: "", dueDate: "" });
   const [payment, setPayment] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const { format } = useCurrency();
 
   async function fetchDebts() {
     const res = await fetch("/api/debts");
@@ -68,7 +69,7 @@ export default function DebtPage() {
         {debts.length > 0 && (
           <div className="bg-orange-50 rounded-xl px-4 py-2 text-right">
             <p className="text-xs text-orange-500">Total Remaining</p>
-            <p className="text-xl font-bold text-orange-600">{formatCurrency(totalDebt)}</p>
+            <p className="text-xl font-bold text-orange-600">{format(totalDebt)}</p>
           </div>
         )}
       </div>
@@ -119,10 +120,10 @@ export default function DebtPage() {
                     <div>
                       <p className="font-semibold text-gray-800">{d.name}</p>
                       <p className="text-xs text-gray-400">
-                        {formatCurrency(d.paidAmount)} paid / {formatCurrency(remaining)} remaining
+                        {format(d.paidAmount)} paid / {format(remaining)} remaining
                       </p>
                       <p className="text-xs text-gray-400">
-                        {d.interestRate}% APR | Min payment: {formatCurrency(d.minimumPayment)}
+                        {d.interestRate}% APR | Min payment: {format(d.minimumPayment)}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -147,7 +148,7 @@ export default function DebtPage() {
                     <div className="mt-3 space-y-1">
                       {d.payments.map((p) => (
                         <div key={p.id} className="text-xs text-gray-400 flex justify-between">
-                          <span>Payment: {formatCurrency(p.amount)}</span>
+                          <span>Payment: {format(p.amount)}</span>
                           <span>{new Date(p.date).toLocaleDateString()}</span>
                         </div>
                       ))}

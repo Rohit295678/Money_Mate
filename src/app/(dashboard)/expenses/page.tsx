@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
-import { EXPENSE_CATEGORIES, formatCurrency, CATEGORY_COLORS } from "@/lib/utils";
+import { EXPENSE_CATEGORIES, CATEGORY_COLORS } from "@/lib/utils";
+import { useCurrency } from "@/lib/currency-context";
 
 interface Expense {
   id: string;
@@ -17,6 +18,7 @@ export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [form, setForm] = useState({ amount: "", category: EXPENSE_CATEGORIES[0], description: "", date: "" });
   const [loading, setLoading] = useState(false);
+  const { format } = useCurrency();
 
   async function fetchExpenses() {
     const res = await fetch(`/api/expenses?month=${month}&year=${year}`);
@@ -102,7 +104,7 @@ export default function ExpensesPage() {
                     <span className="w-2.5 h-2.5 rounded-full" style={{ background: CATEGORY_COLORS[c] }} />
                     {c}
                   </span>
-                  <span className="font-medium">{formatCurrency(byCategory[c])}</span>
+                  <span className="font-medium">{format(byCategory[c])}</span>
                 </div>
               ))}
             </div>
@@ -114,7 +116,7 @@ export default function ExpensesPage() {
             <h3 className="text-lg font-semibold text-gray-800">
               Transactions ({expenses.length})
             </h3>
-            <span className="text-lg font-bold text-red-600">{formatCurrency(total)}</span>
+            <span className="text-lg font-bold text-red-600">{format(total)}</span>
           </div>
           {expenses.length === 0 ? (
             <p className="text-gray-400 text-sm py-12 text-center">No expenses yet. Add your first one!</p>
@@ -131,7 +133,7 @@ export default function ExpensesPage() {
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="text-right">
-                      <p className="text-sm font-semibold text-gray-800">{formatCurrency(e.amount)}</p>
+                      <p className="text-sm font-semibold text-gray-800">{format(e.amount)}</p>
                       <p className="text-xs text-gray-400">{new Date(e.date).toLocaleDateString()}</p>
                     </div>
                     <button onClick={() => deleteExpense(e.id)}

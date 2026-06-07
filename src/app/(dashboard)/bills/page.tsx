@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { formatCurrency } from "@/lib/utils";
+import { useCurrency } from "@/lib/currency-context";
 
 interface Member { id: string; name: string; email: string | null }
 interface Split { id: string; member_id: string; amount: number; settled: boolean; member: Member }
@@ -49,6 +49,7 @@ export default function BillsPage() {
   const [newBill, setNewBill] = useState({ title: "", amount: "", memberId: "" });
   const [showGroupForm, setShowGroupForm] = useState(false);
   const [loading, setLoading] = useState(false);
+  const { format } = useCurrency();
 
   async function fetchGroups() {
     const res = await fetch("/api/groups");
@@ -220,13 +221,13 @@ export default function BillsPage() {
                               <p className="font-medium text-sm text-gray-800">{b.title}</p>
                               <p className="text-xs text-gray-400">Paid by {b.paidBy.name}</p>
                             </div>
-                            <p className="font-semibold text-gray-800">{formatCurrency(b.amount)}</p>
+                            <p className="font-semibold text-gray-800">{format(b.amount)}</p>
                           </div>
                           <div className="space-y-1">
                             {b.splits.map((s) => (
                               <div key={s.id} className="flex items-center justify-between text-xs">
                                 <span className={s.settled ? "line-through text-gray-300" : "text-gray-500"}>
-                                  {s.member.name}: {formatCurrency(s.amount)}
+                                  {s.member.name}: {format(s.amount)}
                                 </span>
                                 {!s.settled && (
                                   <button onClick={() => settleSplit(s.id)}
@@ -256,7 +257,7 @@ export default function BillsPage() {
                             {" owes "}
                             <span className="text-emerald-600">{memberName(b.to)}</span>
                           </p>
-                          <span className="font-bold text-orange-600">{formatCurrency(b.amount)}</span>
+                          <span className="font-bold text-orange-600">{format(b.amount)}</span>
                         </div>
                       ))
                     )}
