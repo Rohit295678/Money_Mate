@@ -52,3 +52,4 @@ Generate a strong secret with:
 ```bash
 openssl rand -base64 32
 ```
+# Money_Mate
