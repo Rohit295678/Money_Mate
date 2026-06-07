@@ -1,7 +1,10 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useCurrency } from "@/lib/currency-context";
+import dynamic from "next/dynamic";
 import Link from "next/link";
+
+const OverviewCharts = dynamic(() => import("@/components/charts/OverviewCharts"), { ssr: false });
 
 interface DashboardData {
   totalSpent: number;
@@ -9,6 +12,8 @@ interface DashboardData {
   totalSaved: number;
   totalDebt: number;
   recentExpenses: { id: string; amount: number; category: string; description: string | null; date: string }[];
+  categoryBreakdown: { category: string; amount: number }[];
+  budgetComparison: { category: string; fullCategory: string; budget: number; spent: number }[];
 }
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -131,6 +136,14 @@ export default function DashboardPage() {
               </div>
             ))}
       </div>
+
+      {/* Charts */}
+      {data && (
+        <OverviewCharts
+          categoryBreakdown={data.categoryBreakdown}
+          budgetComparison={data.budgetComparison}
+        />
+      )}
 
       {/* Quick Actions */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">

@@ -23,10 +23,9 @@ export async function GET(req: Request) {
     .all(userId, start, end) as { id: string; amount: number; category: string; description: string | null; date: string }[];
 
   const budgets = db
-    .prepare("SELECT limit_amount FROM budgets WHERE user_id = ? AND month = ? AND year = ?")
-    .all(userId, month, year) as { limit_amount: number }[];
+    .prepare("SELECT category, limit_amount FROM budgets WHERE user_id = ? AND month = ? AND year = ?")
+    .all(userId, month, year) as { category: string; limit_amount: number }[];
 
-  // Savings + debt are all-time totals — not month-specific
   const goals = db
     .prepare("SELECT current_amount FROM savings_goals WHERE user_id = ?")
     .all(userId) as { current_amount: number }[];
@@ -35,11 +34,36 @@ export async function GET(req: Request) {
     .prepare("SELECT total_amount, paid_amount FROM debts WHERE user_id = ?")
     .all(userId) as { total_amount: number; paid_amount: number }[];
 
+  // Aggregate expenses by category for pie chart
+  const spentByCategory: Record<string, number> = {};
+  for (const e of expenses) {
+    spentByCategory[e.category] = (spentByCategory[e.category] ?? 0) + e.amount;
+  }
+  const categoryBreakdown = Object.entries(spentByCategory)
+    .map(([category, amount]) => ({ category, amount }))
+    .sort((a, b) => b.amount - a.amount);
+
+  // Budget vs actual per category for bar chart
+  const budgetMap: Record<string, number> = {};
+  for (const b of budgets) budgetMap[b.category] = b.limit_amount;
+
+  const allCategories = Array.from(
+    new Set([...Object.keys(spentByCategory), ...Object.keys(budgetMap)])
+  );
+  const budgetComparison = allCategories.map((category) => ({
+    category: category.length > 12 ? category.slice(0, 11) + "…" : category,
+    fullCategory: category,
+    budget: budgetMap[category] ?? 0,
+    spent: spentByCategory[category] ?? 0,
+  }));
+
   return NextResponse.json({
     totalSpent: expenses.reduce((s, e) => s + e.amount, 0),
     totalBudget: budgets.reduce((s, b) => s + b.limit_amount, 0),
     totalSaved: goals.reduce((s, g) => s + g.current_amount, 0),
     totalDebt: debts.reduce((s, d) => s + (d.total_amount - d.paid_amount), 0),
     recentExpenses: expenses.slice(0, 5),
+    categoryBreakdown,
+    budgetComparison,
   });
 }
