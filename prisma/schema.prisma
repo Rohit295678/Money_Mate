@@ -1,0 +1,141 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String?
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+
+  expenses     Expense[]
+  budgets      Budget[]
+  savingsGoals SavingsGoal[]
+  debts        Debt[]
+  groups       Group[]
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  userId      String
+  amount      Float
+  category    String
+  description String?
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Budget {
+  id        String   @id @default(cuid())
+  userId    String
+  category  String
+  limit     Float
+  month     Int
+  year      Int
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category, month, year])
+}
+
+model SavingsGoal {
+  id            String    @id @default(cuid())
+  userId        String
+  name          String
+  targetAmount  Float
+  currentAmount Float     @default(0)
+  deadline      DateTime?
+  createdAt     DateTime  @default(now())
+
+  user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contributions SavingsContribution[]
+}
+
+model SavingsContribution {
+  id     String   @id @default(cuid())
+  goalId String
+  amount Float
+  note   String?
+  date   DateTime @default(now())
+
+  goal SavingsGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+}
+
+model Debt {
+  id             String    @id @default(cuid())
+  userId         String
+  name           String
+  totalAmount    Float
+  paidAmount     Float     @default(0)
+  interestRate   Float     @default(0)
+  minimumPayment Float     @default(0)
+  dueDate        DateTime?
+  createdAt      DateTime  @default(now())
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payments DebtPayment[]
+}
+
+model DebtPayment {
+  id     String   @id @default(cuid())
+  debtId String
+  amount Float
+  date   DateTime @default(now())
+
+  debt Debt @relation(fields: [debtId], references: [id], onDelete: Cascade)
+}
+
+model Group {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  createdAt DateTime @default(now())
+
+  owner   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  members Member[]
+  bills   Bill[]
+}
+
+model Member {
+  id      String  @id @default(cuid())
+  groupId String
+  name    String
+  email   String?
+
+  group     Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  paidBills Bill[]
+  splits    BillSplit[]
+}
+
+model Bill {
+  id       String   @id @default(cuid())
+  groupId  String
+  memberId String
+  title    String
+  amount   Float
+  date     DateTime @default(now())
+
+  group  Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  paidBy Member      @relation(fields: [memberId], references: [id])
+  splits BillSplit[]
+}
+
+model BillSplit {
+  id       String  @id @default(cuid())
+  billId   String
+  memberId String
+  amount   Float
+  settled  Boolean @default(false)
+
+  bill   Bill   @relation(fields: [billId], references: [id], onDelete: Cascade)
+  member Member @relation(fields: [memberId], references: [id])
+}
