@@ -44,6 +44,68 @@ function calcBalances(group: Group): { from: string; to: string; amount: number 
   return result;
 }
 
+function MemberTotals({ group, format }: { group: Group; format: (n: number) => string }) {
+  const rows = group.members.map((m) => {
+    const totalShare = group.bills
+      .flatMap((b) => b.splits)
+      .filter((s) => s.member?.id === m.id)
+      .reduce((sum, s) => sum + s.amount, 0);
+
+    const totalPaid = group.bills
+      .filter((b) => b.paidBy.id === m.id)
+      .reduce((sum, b) => sum + b.amount, 0);
+
+    const net = totalPaid - totalShare; // positive = owed money back, negative = still owes
+    return { name: m.name, totalShare, totalPaid, net };
+  });
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+      <h4 className="text-base font-semibold text-gray-800 mb-1">Total Amount Each Person Spent</h4>
+      <p className="text-xs text-gray-400 mb-4">Share = their cut of all bills regardless of who paid</p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-100">
+              <th className="text-left py-2 pr-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Member</th>
+              <th className="text-right py-2 pr-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Total Share</th>
+              <th className="text-right py-2 pr-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Total Paid</th>
+              <th className="text-right py-2 text-xs font-semibold text-gray-400 uppercase tracking-wide">Net Balance</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {rows.map((r) => (
+              <tr key={r.name}>
+                <td className="py-3 pr-4 font-medium text-gray-800">{r.name}</td>
+                <td className="py-3 pr-4 text-right text-gray-600">{format(r.totalShare)}</td>
+                <td className="py-3 pr-4 text-right text-gray-600">{format(r.totalPaid)}</td>
+                <td className="py-3 text-right">
+                  <span
+                    className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                      r.net > 0.01
+                        ? "bg-emerald-50 text-emerald-700"
+                        : r.net < -0.01
+                        ? "bg-red-50 text-red-600"
+                        : "bg-gray-100 text-gray-500"
+                    }`}
+                  >
+                    {r.net > 0.01 ? "+" : ""}{format(r.net)}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-gray-400 mt-4">
+        Net balance: <span className="text-emerald-600 font-medium">green = others owe them</span>
+        {" | "}
+        <span className="text-red-500 font-medium">red = they still owe others</span>
+      </p>
+    </div>
+  );
+}
+
 export default function BillsPage() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -270,6 +332,11 @@ export default function BillsPage() {
 
               {/* Charts — spending per bill + member breakdown */}
               {group.bills.length > 0 && <BillCharts group={group} />}
+
+              {/* Member totals table */}
+              {group.bills.length > 0 && (
+                <MemberTotals group={group} format={format} />
+              )}
             </div>
           )}
         </div>
