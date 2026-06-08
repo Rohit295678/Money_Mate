@@ -53,30 +53,46 @@ function buildMemberStats(group: Group) {
   }));
 }
 
-function CurrencyTooltip({ active, payload, label }: Record<string, unknown>) {
+// Lightweight subset of Recharts' tooltip payload — typed so React 19's
+// stricter `unknown` -> ReactNode rules don't block the build.
+type TooltipPayloadItem = {
+  name?: string | number;
+  value?: string | number;
+  color?: string;
+  payload?: { fill?: string } & Record<string, unknown>;
+};
+type TooltipRenderProps = {
+  active?: boolean;
+  payload?: ReadonlyArray<TooltipPayloadItem>;
+  label?: string | number;
+};
+
+function CurrencyTooltip({ active, payload, label }: TooltipRenderProps) {
   const { format } = useCurrency();
-  if (!active || !Array.isArray(payload) || payload.length === 0) return null;
+  if (!active || !payload || payload.length === 0) return null;
   return (
     <div className="bg-white border border-gray-100 rounded-xl shadow-lg px-4 py-3 text-sm">
-      {label && <p className="font-semibold text-gray-700 mb-1">{String(label)}</p>}
-      {payload.map((p: Record<string, unknown>) => (
-        <p key={String(p.name)} style={{ color: String(p.color) }}>
-          {String(p.name)}: {format(Number(p.value))}
+      {label !== undefined && label !== "" && (
+        <p className="font-semibold text-gray-700 mb-1">{label}</p>
+      )}
+      {payload.map((p, i) => (
+        <p key={`${p.name ?? i}`} style={{ color: p.color }}>
+          {p.name}: {format(Number(p.value ?? 0))}
         </p>
       ))}
     </div>
   );
 }
 
-function PieTooltip({ active, payload }: Record<string, unknown>) {
+function PieTooltip({ active, payload }: TooltipRenderProps) {
   const { format } = useCurrency();
-  if (!active || !Array.isArray(payload) || payload.length === 0) return null;
-  const item = payload[0] as Record<string, unknown>;
-  const fill = (item.payload as Record<string, unknown>)?.fill as string;
+  if (!active || !payload || payload.length === 0) return null;
+  const item = payload[0];
+  const fill = item.payload?.fill;
   return (
     <div className="bg-white border border-gray-100 rounded-xl shadow-lg px-4 py-3 text-sm">
-      <p className="font-semibold text-gray-700">{String(item.name)}</p>
-      <p style={{ color: fill }}>{format(Number(item.value))}</p>
+      <p className="font-semibold text-gray-700">{item.name}</p>
+      <p style={{ color: fill }}>{format(Number(item.value ?? 0))}</p>
     </div>
   );
 }
