@@ -1,25 +1,23 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { getDb } from "@/lib/db";
-import { randomUUID } from "crypto";
+import { prisma } from "@/lib/db";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const db = getDb();
-  const goals = db
-    .prepare("SELECT * FROM savings_goals WHERE user_id = ? ORDER BY created_at DESC")
-    .all(session.user.id) as Record<string, unknown>[];
-
-  const result = goals.map((g) => ({
-    ...g,
-    contributions: db
-      .prepare("SELECT * FROM savings_contributions WHERE goal_id = ? ORDER BY date DESC LIMIT 5")
-      .all(g.id as string),
-  }));
-  return NextResponse.json(result);
+  const goals = await prisma.savingsGoal.findMany({
+    where: { userId: session.user.id },
+    orderBy: { createdAt: "desc" },
+    include: {
+      contributions: {
+        orderBy: { date: "desc" },
+        take: 5,
+      },
+    },
+  });
+  return NextResponse.json(goals);
 }
 
 export async function POST(req: Request) {
@@ -30,13 +28,14 @@ export async function POST(req: Request) {
   if (!name || !targetAmount)
     return NextResponse.json({ error: "Name and target required" }, { status: 400 });
 
-  const db = getDb();
-  const id = randomUUID();
-  db.prepare(
-    "INSERT INTO savings_goals (id, user_id, name, target_amount, deadline) VALUES (?, ?, ?, ?, ?)"
-  ).run(id, session.user.id, name, Number(targetAmount), deadline ?? null);
-
-  const goal = db.prepare("SELECT * FROM savings_goals WHERE id = ?").get(id);
+  const goal = await prisma.savingsGoal.create({
+    data: {
+      userId: session.user.id,
+      name,
+      targetAmount: Number(targetAmount),
+      deadline: deadline ? new Date(deadline) : null,
+    },
+  });
   return NextResponse.json(goal, { status: 201 });
 }
 
@@ -48,21 +47,22 @@ export async function PUT(req: Request) {
   if (!goalId || !amount)
     return NextResponse.json({ error: "Goal ID and amount required" }, { status: 400 });
 
-  const db = getDb();
-  const goal = db
-    .prepare("SELECT * FROM savings_goals WHERE id = ? AND user_id = ?")
-    .get(goalId, session.user.id);
-  if (!goal) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const owned = await prisma.savingsGoal.findFirst({
+    where: { id: goalId, userId: session.user.id },
+    select: { id: true },
+  });
+  if (!owned) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const cid = randomUUID();
-  db.prepare(
-    "INSERT INTO savings_contributions (id, goal_id, amount, note) VALUES (?, ?, ?, ?)"
-  ).run(cid, goalId, Number(amount), note ?? null);
-  db.prepare(
-    "UPDATE savings_goals SET current_amount = current_amount + ? WHERE id = ?"
-  ).run(Number(amount), goalId);
+  const [, updated] = await prisma.$transaction([
+    prisma.savingsContribution.create({
+      data: { goalId, amount: Number(amount), note: note ?? null },
+    }),
+    prisma.savingsGoal.update({
+      where: { id: goalId },
+      data: { currentAmount: { increment: Number(amount) } },
+    }),
+  ]);
 
-  const updated = db.prepare("SELECT * FROM savings_goals WHERE id = ?").get(goalId);
   return NextResponse.json({ goal: updated });
 }
 
@@ -74,7 +74,8 @@ export async function DELETE(req: Request) {
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
-  const db = getDb();
-  db.prepare("DELETE FROM savings_goals WHERE id = ? AND user_id = ?").run(id, session.user.id);
+  await prisma.savingsGoal.deleteMany({
+    where: { id, userId: session.user.id },
+  });
   return NextResponse.json({ success: true });
 }

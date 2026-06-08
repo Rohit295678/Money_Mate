@@ -1,25 +1,23 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { getDb } from "@/lib/db";
-import { randomUUID } from "crypto";
+import { prisma } from "@/lib/db";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const db = getDb();
-  const debts = db
-    .prepare("SELECT * FROM debts WHERE user_id = ? ORDER BY created_at DESC")
-    .all(session.user.id) as Record<string, unknown>[];
-
-  const result = debts.map((d) => ({
-    ...d,
-    payments: db
-      .prepare("SELECT * FROM debt_payments WHERE debt_id = ? ORDER BY date DESC LIMIT 3")
-      .all(d.id as string),
-  }));
-  return NextResponse.json(result);
+  const debts = await prisma.debt.findMany({
+    where: { userId: session.user.id },
+    orderBy: { createdAt: "desc" },
+    include: {
+      payments: {
+        orderBy: { date: "desc" },
+        take: 3,
+      },
+    },
+  });
+  return NextResponse.json(debts);
 }
 
 export async function POST(req: Request) {
@@ -30,13 +28,16 @@ export async function POST(req: Request) {
   if (!name || !totalAmount)
     return NextResponse.json({ error: "Name and total amount required" }, { status: 400 });
 
-  const db = getDb();
-  const id = randomUUID();
-  db.prepare(
-    "INSERT INTO debts (id, user_id, name, total_amount, interest_rate, minimum_payment, due_date) VALUES (?, ?, ?, ?, ?, ?, ?)"
-  ).run(id, session.user.id, name, Number(totalAmount), Number(interestRate ?? 0), Number(minimumPayment ?? 0), dueDate ?? null);
-
-  const debt = db.prepare("SELECT * FROM debts WHERE id = ?").get(id);
+  const debt = await prisma.debt.create({
+    data: {
+      userId: session.user.id,
+      name,
+      totalAmount: Number(totalAmount),
+      interestRate: Number(interestRate ?? 0),
+      minimumPayment: Number(minimumPayment ?? 0),
+      dueDate: dueDate ? new Date(dueDate) : null,
+    },
+  });
   return NextResponse.json(debt, { status: 201 });
 }
 
@@ -48,17 +49,22 @@ export async function PUT(req: Request) {
   if (!debtId || !amount)
     return NextResponse.json({ error: "Debt ID and amount required" }, { status: 400 });
 
-  const db = getDb();
-  const debt = db
-    .prepare("SELECT * FROM debts WHERE id = ? AND user_id = ?")
-    .get(debtId, session.user.id);
-  if (!debt) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const owned = await prisma.debt.findFirst({
+    where: { id: debtId, userId: session.user.id },
+    select: { id: true },
+  });
+  if (!owned) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const pid = randomUUID();
-  db.prepare("INSERT INTO debt_payments (id, debt_id, amount) VALUES (?, ?, ?)").run(pid, debtId, Number(amount));
-  db.prepare("UPDATE debts SET paid_amount = paid_amount + ? WHERE id = ?").run(Number(amount), debtId);
+  const [, updated] = await prisma.$transaction([
+    prisma.debtPayment.create({
+      data: { debtId, amount: Number(amount) },
+    }),
+    prisma.debt.update({
+      where: { id: debtId },
+      data: { paidAmount: { increment: Number(amount) } },
+    }),
+  ]);
 
-  const updated = db.prepare("SELECT * FROM debts WHERE id = ?").get(debtId);
   return NextResponse.json({ debt: updated });
 }
 
@@ -70,7 +76,8 @@ export async function DELETE(req: Request) {
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
-  const db = getDb();
-  db.prepare("DELETE FROM debts WHERE id = ? AND user_id = ?").run(id, session.user.id);
+  await prisma.debt.deleteMany({
+    where: { id, userId: session.user.id },
+  });
   return NextResponse.json({ success: true });
 }

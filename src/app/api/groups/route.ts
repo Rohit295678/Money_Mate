@@ -1,36 +1,119 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { getDb } from "@/lib/db";
-import { randomUUID } from "crypto";
+import { prisma } from "@/lib/db";
+
+type RawMember = {
+  id: string;
+  groupId: string;
+  userId: string;
+  joinedAt: Date;
+  user: { id: string; name: string | null; email: string };
+};
+
+type RawSplit = {
+  id: string;
+  billId: string;
+  memberId: string;
+  amount: number;
+  settled: boolean;
+  member: RawMember;
+};
+
+type RawBill = {
+  id: string;
+  groupId: string;
+  memberId: string;
+  title: string;
+  amount: number;
+  date: Date;
+  paidBy: RawMember;
+  splits: RawSplit[];
+};
+
+// Flatten a GroupMember row into the `Member` shape the frontend already uses.
+// Frontend expects: { id, name, email } where `id` is the GroupMember row id.
+function flattenMember(m: RawMember) {
+  return {
+    id: m.id,
+    user_id: m.userId,
+    name: m.user.name ?? m.user.email.split("@")[0],
+    email: m.user.email,
+  };
+}
+
+function flattenBill(b: RawBill) {
+  return {
+    id: b.id,
+    group_id: b.groupId,
+    member_id: b.memberId,
+    title: b.title,
+    amount: b.amount,
+    date: b.date,
+    paidBy: flattenMember(b.paidBy),
+    splits: b.splits.map((s) => ({
+      id: s.id,
+      bill_id: s.billId,
+      member_id: s.memberId,
+      amount: s.amount,
+      settled: s.settled,
+      member: flattenMember(s.member),
+    })),
+  };
+}
+
+type RawSettlement = {
+  id: string;
+  groupId: string;
+  fromMemberId: string;
+  toMemberId: string;
+  amount: number;
+  note: string | null;
+  date: Date;
+};
 
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const db = getDb();
-  const groups = db
-    .prepare("SELECT * FROM bill_groups WHERE user_id = ? ORDER BY created_at DESC")
-    .all(session.user.id) as Record<string, unknown>[];
-
-  const result = groups.map((g) => {
-    const members = db.prepare("SELECT * FROM members WHERE group_id = ?").all(g.id as string);
-    const bills = (
-      db.prepare("SELECT * FROM bills WHERE group_id = ? ORDER BY date DESC").all(g.id as string) as Record<string, unknown>[]
-    ).map((b) => ({
-      ...b,
-      paidBy: db.prepare("SELECT * FROM members WHERE id = ?").get(b.member_id as string),
-      splits: (
-        db.prepare("SELECT * FROM bill_splits WHERE bill_id = ?").all(b.id as string) as Record<string, unknown>[]
-      ).map((s) => ({
-        ...s,
-        settled: Boolean(s.settled),
-        member: db.prepare("SELECT * FROM members WHERE id = ?").get(s.member_id as string),
-      })),
-    }));
-    return { ...g, members, bills };
+  // Return every group where the user has a GroupMember row.
+  const groups = await prisma.group.findMany({
+    where: { members: { some: { userId: session.user.id } } },
+    orderBy: { createdAt: "desc" },
+    include: {
+      members: { include: { user: { select: { id: true, name: true, email: true } } } },
+      bills: {
+        orderBy: { date: "desc" },
+        include: {
+          paidBy: { include: { user: { select: { id: true, name: true, email: true } } } },
+          splits: {
+            include: {
+              member: { include: { user: { select: { id: true, name: true, email: true } } } },
+            },
+          },
+        },
+      },
+      settlements: { orderBy: { date: "desc" } },
+    },
   });
 
+  const result = groups.map((g) => ({
+    id: g.id,
+    name: g.name,
+    user_id: g.userId,
+    created_at: g.createdAt,
+    isOwner: g.userId === session.user.id,
+    members: (g.members as unknown as RawMember[]).map(flattenMember),
+    bills: (g.bills as unknown as RawBill[]).map(flattenBill),
+    settlements: (g.settlements as unknown as RawSettlement[]).map((s) => ({
+      id: s.id,
+      from_member_id: s.fromMemberId,
+      to_member_id: s.toMemberId,
+      amount: s.amount,
+      note: s.note,
+      date: s.date,
+    })),
+  }));
   return NextResponse.json(result);
 }
 
@@ -38,21 +121,72 @@ export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { name, members } = await req.json();
-  if (!name) return NextResponse.json({ error: "Group name required" }, { status: 400 });
+  const body = await req.json();
+  const name: string = body.name;
+  const memberEmails: string[] = Array.isArray(body.memberEmails) ? body.memberEmails : [];
 
-  const db = getDb();
-  const groupId = randomUUID();
-  db.prepare("INSERT INTO bill_groups (id, user_id, name) VALUES (?, ?, ?)").run(groupId, session.user.id, name);
+  if (!name?.trim()) return NextResponse.json({ error: "Group name required" }, { status: 400 });
 
-  const insertMember = db.prepare("INSERT INTO members (id, group_id, name, email) VALUES (?, ?, ?, ?)");
-  for (const m of (members as { name: string; email?: string }[])) {
-    insertMember.run(randomUUID(), groupId, m.name, m.email ?? null);
+  const me = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, email: true },
+  });
+  if (!me) return NextResponse.json({ error: "User not found" }, { status: 401 });
+
+  // Look up every requested email. Reject the whole request if any are unknown.
+  const cleanEmails = Array.from(
+    new Set(
+      memberEmails
+        .map((e) => e?.trim().toLowerCase())
+        .filter((e): e is string => !!e && e !== me.email.toLowerCase())
+    )
+  );
+
+  let foundUsers: { id: string; email: string }[] = [];
+  if (cleanEmails.length > 0) {
+    foundUsers = await prisma.user.findMany({
+      where: { email: { in: cleanEmails, mode: "insensitive" } },
+      select: { id: true, email: true },
+    });
   }
 
-  const group = db.prepare("SELECT * FROM bill_groups WHERE id = ?").get(groupId);
-  const memberRows = db.prepare("SELECT * FROM members WHERE group_id = ?").all(groupId);
-  return NextResponse.json({ ...group, members: memberRows, bills: [] }, { status: 201 });
+  const foundLowercase = new Set(foundUsers.map((u) => u.email.toLowerCase()));
+  const unknown = cleanEmails.filter((e) => !foundLowercase.has(e));
+  if (unknown.length > 0) {
+    return NextResponse.json(
+      { error: `Not registered users: ${unknown.join(", ")}` },
+      { status: 400 }
+    );
+  }
+
+  // Creator is auto-included; dedupe just in case.
+  const userIdsForGroup = Array.from(new Set([me.id, ...foundUsers.map((u) => u.id)]));
+
+  const created = await prisma.group.create({
+    data: {
+      userId: me.id,
+      name: name.trim(),
+      members: {
+        create: userIdsForGroup.map((uid) => ({ userId: uid })),
+      },
+    },
+    include: {
+      members: { include: { user: { select: { id: true, name: true, email: true } } } },
+    },
+  });
+
+  return NextResponse.json(
+    {
+      id: created.id,
+      name: created.name,
+      user_id: created.userId,
+      created_at: created.createdAt,
+      isOwner: true,
+      members: (created.members as unknown as RawMember[]).map(flattenMember),
+      bills: [],
+    },
+    { status: 201 }
+  );
 }
 
 export async function DELETE(req: Request) {
@@ -63,14 +197,13 @@ export async function DELETE(req: Request) {
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
-  const db = getDb();
-  // Verify ownership before deleting
-  const group = db
-    .prepare("SELECT id FROM bill_groups WHERE id = ? AND user_id = ?")
-    .get(id, session.user.id);
-  if (!group) return NextResponse.json({ error: "Group not found" }, { status: 404 });
+  // Any member of the group can delete it (per app spec).
+  const member = await prisma.groupMember.findFirst({
+    where: { groupId: id, userId: session.user.id },
+    select: { id: true },
+  });
+  if (!member) return NextResponse.json({ error: "Group not found" }, { status: 404 });
 
-  // ON DELETE CASCADE handles members, bills, and bill_splits automatically
-  db.prepare("DELETE FROM bill_groups WHERE id = ?").run(id);
+  await prisma.group.delete({ where: { id } });
   return NextResponse.json({ success: true });
 }

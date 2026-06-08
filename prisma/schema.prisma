@@ -1,10 +1,16 @@
+// Prisma schema for MoneyMate — Postgres (Neon-compatible)
+// Field/table @map values mirror the original SQLite snake_case so the
+// existing API JSON shapes stay byte-for-byte compatible with the frontend.
+
+// In Prisma 7, datasource.url and directUrl moved to prisma.config.ts.
+// Only the provider stays here.
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider = "postgresql"
 }
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 model User {
@@ -12,130 +18,179 @@ model User {
   name      String?
   email     String   @unique
   password  String
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @map("created_at")
 
   expenses     Expense[]
   budgets      Budget[]
   savingsGoals SavingsGoal[]
   debts        Debt[]
-  groups       Group[]
+  ownedGroups  Group[]       @relation("GroupOwner")
+  memberships  GroupMember[]
+
+  @@map("users")
 }
 
 model Expense {
   id          String   @id @default(cuid())
-  userId      String
+  userId      String   @map("user_id")
   amount      Float
   category    String
   description String?
   date        DateTime @default(now())
-  createdAt   DateTime @default(now())
+  createdAt   DateTime @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+  @@map("expenses")
 }
 
 model Budget {
-  id        String   @id @default(cuid())
-  userId    String
-  category  String
-  limit     Float
-  month     Int
-  year      Int
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  category    String
+  limitAmount Float    @map("limit_amount")
+  month       Int
+  year        Int
+  createdAt   DateTime @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, category, month, year])
+  @@map("budgets")
 }
 
 model SavingsGoal {
   id            String    @id @default(cuid())
-  userId        String
+  userId        String    @map("user_id")
   name          String
-  targetAmount  Float
-  currentAmount Float     @default(0)
+  targetAmount  Float     @map("target_amount")
+  currentAmount Float     @default(0) @map("current_amount")
   deadline      DateTime?
-  createdAt     DateTime  @default(now())
+  createdAt     DateTime  @default(now()) @map("created_at")
 
   user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   contributions SavingsContribution[]
+
+  @@map("savings_goals")
 }
 
 model SavingsContribution {
   id     String   @id @default(cuid())
-  goalId String
+  goalId String   @map("goal_id")
   amount Float
   note   String?
   date   DateTime @default(now())
 
   goal SavingsGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@map("savings_contributions")
 }
 
 model Debt {
   id             String    @id @default(cuid())
-  userId         String
+  userId         String    @map("user_id")
   name           String
-  totalAmount    Float
-  paidAmount     Float     @default(0)
-  interestRate   Float     @default(0)
-  minimumPayment Float     @default(0)
-  dueDate        DateTime?
-  createdAt      DateTime  @default(now())
+  totalAmount    Float     @map("total_amount")
+  paidAmount     Float     @default(0) @map("paid_amount")
+  interestRate   Float     @default(0) @map("interest_rate")
+  minimumPayment Float     @default(0) @map("minimum_payment")
+  dueDate        DateTime? @map("due_date")
+  createdAt      DateTime  @default(now()) @map("created_at")
 
   user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   payments DebtPayment[]
+
+  @@map("debts")
 }
 
 model DebtPayment {
   id     String   @id @default(cuid())
-  debtId String
+  debtId String   @map("debt_id")
   amount Float
   date   DateTime @default(now())
 
   debt Debt @relation(fields: [debtId], references: [id], onDelete: Cascade)
+
+  @@map("debt_payments")
 }
 
 model Group {
   id        String   @id @default(cuid())
-  userId    String
+  userId    String   @map("user_id")
   name      String
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @map("created_at")
 
-  owner   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  members Member[]
-  bills   Bill[]
+  owner       User          @relation("GroupOwner", fields: [userId], references: [id], onDelete: Cascade)
+  members     GroupMember[]
+  bills       Bill[]
+  settlements Settlement[]
+
+  @@map("bill_groups")
 }
 
-model Member {
-  id      String  @id @default(cuid())
-  groupId String
-  name    String
-  email   String?
+// Each row links a registered User to a Group. Bill payers and splits
+// reference GroupMember.id (so amounts always tie back to a real User).
+model GroupMember {
+  id       String   @id @default(cuid())
+  groupId  String   @map("group_id")
+  userId   String   @map("user_id")
+  joinedAt DateTime @default(now()) @map("joined_at")
 
-  group     Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  paidBills Bill[]
-  splits    BillSplit[]
+  group               Group        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user                User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paidBills           Bill[]
+  splits              BillSplit[]
+  settlementsMade     Settlement[] @relation("SettlementFrom")
+  settlementsReceived Settlement[] @relation("SettlementTo")
+
+  @@unique([groupId, userId])
+  @@map("group_members")
+}
+
+// One row per partial-or-full payment from one group member to another.
+// Settle Up shows: rawDebt(from→to) − sum(Settlement.amount where from→to).
+model Settlement {
+  id           String   @id @default(cuid())
+  groupId      String   @map("group_id")
+  fromMemberId String   @map("from_member_id")
+  toMemberId   String   @map("to_member_id")
+  amount       Float
+  note         String?
+  date         DateTime @default(now())
+
+  group Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  from  GroupMember @relation("SettlementFrom", fields: [fromMemberId], references: [id], onDelete: Cascade)
+  to    GroupMember @relation("SettlementTo", fields: [toMemberId], references: [id], onDelete: Cascade)
+
+  @@index([groupId, fromMemberId, toMemberId])
+  @@map("settlements")
 }
 
 model Bill {
   id       String   @id @default(cuid())
-  groupId  String
-  memberId String
+  groupId  String   @map("group_id")
+  memberId String   @map("member_id")
   title    String
   amount   Float
   date     DateTime @default(now())
 
   group  Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  paidBy Member      @relation(fields: [memberId], references: [id])
+  paidBy GroupMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
   splits BillSplit[]
+
+  @@map("bills")
 }
 
 model BillSplit {
   id       String  @id @default(cuid())
-  billId   String
-  memberId String
+  billId   String  @map("bill_id")
+  memberId String  @map("member_id")
   amount   Float
   settled  Boolean @default(false)
 
-  bill   Bill   @relation(fields: [billId], references: [id], onDelete: Cascade)
-  member Member @relation(fields: [memberId], references: [id])
+  bill   Bill        @relation(fields: [billId], references: [id], onDelete: Cascade)
+  member GroupMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@map("bill_splits")
 }

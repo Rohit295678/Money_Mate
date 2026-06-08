@@ -54,6 +54,35 @@ export default function ExpensesPage() {
     return acc;
   }, {});
 
+  // Group expenses by calendar day (local) — newest day first.
+  // Bucket key is YYYY-MM-DD so it sorts lexicographically the same as
+  // chronologically; we then reverse for descending order.
+  const groupedByDate = expenses.reduce<Record<string, Expense[]>>((acc, e) => {
+    const d = new Date(e.date);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    (acc[key] ||= []).push(e);
+    return acc;
+  }, {});
+  const sortedDays = Object.keys(groupedByDate).sort((a, b) => b.localeCompare(a));
+
+  function formatDayHeading(key: string) {
+    const [y, m, d] = key.split("-").map(Number);
+    const date = new Date(y, m - 1, d);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    const cmp = date.getTime();
+    if (cmp === today.getTime()) return "Today";
+    if (cmp === yesterday.getTime()) return "Yesterday";
+    return date.toLocaleDateString(undefined, {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      weekday: "short",
+    });
+  }
+
   const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
   return (
@@ -123,28 +152,50 @@ export default function ExpensesPage() {
           {expenses.length === 0 ? (
             <p className="text-gray-400 text-sm py-12 text-center">No expenses yet. Add your first one!</p>
           ) : (
-            <div className="divide-y divide-gray-50">
-              {expenses.map((e) => (
-                <div key={e.id} className="flex items-center justify-between py-3 group">
-                  <div className="flex items-center gap-3">
-                    <span className="w-3 h-3 rounded-full shrink-0" style={{ background: CATEGORY_COLORS[e.category] }} />
-                    <div>
-                      <p className="text-sm font-medium text-gray-800">{e.category}</p>
-                      {e.description && <p className="text-xs text-gray-400">{e.description}</p>}
+            <div className="space-y-5">
+              {sortedDays.map((day) => {
+                const items = groupedByDate[day];
+                const dayTotal = items.reduce((s, e) => s + e.amount, 0);
+                return (
+                  <div key={day}>
+                    <div className="flex items-center justify-between mb-2 px-3 py-2 bg-gray-100 rounded-lg border border-gray-200">
+                      <h4 className="text-sm font-bold text-gray-800">
+                        {formatDayHeading(day)}
+                      </h4>
+                      <span className="text-sm font-bold text-gray-800">
+                        {format(dayTotal)}
+                      </span>
+                    </div>
+                    <div className="divide-y divide-gray-50">
+                      {items.map((e) => (
+                        <div key={e.id} className="flex items-center justify-between py-2.5 group">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span
+                              className="w-3 h-3 rounded-full shrink-0"
+                              style={{ background: CATEGORY_COLORS[e.category] }}
+                            />
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-gray-800 truncate">{e.category}</p>
+                              {e.description && (
+                                <p className="text-xs text-gray-400 truncate">{e.description}</p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4 shrink-0">
+                            <p className="text-sm font-semibold text-gray-800">{format(e.amount)}</p>
+                            <button
+                              onClick={() => deleteExpense(e.id)}
+                              className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 text-xs transition"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <p className="text-sm font-semibold text-gray-800">{format(e.amount)}</p>
-                      <p className="text-xs text-gray-400">{new Date(e.date).toLocaleDateString()}</p>
-                    </div>
-                    <button onClick={() => deleteExpense(e.id)}
-                      className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 text-xs transition">
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

@@ -1,10 +1,18 @@
 node_modules
 .env
 .env.local
+.env.*.local
 .next
 prisma/*.db
 prisma/*.db-journal
 prisma/*.db-shm
 prisma/*.db-wal
+prisma/migrations/dev.db*
 .DS_Store
 **/.DS_Store
+
+# Prisma generated client (regenerated on install)
+src/generated/
+
+# Vercel
+.vercel
