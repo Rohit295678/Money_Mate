@@ -13,7 +13,10 @@ export default function BudgetPage() {
   const [year, setYear] = useState(now.getFullYear());
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [form, setForm] = useState({ category: EXPENSE_CATEGORIES[0], limit: "" });
+  const [form, setForm] = useState<{ category: string; limit: string }>({
+    category: EXPENSE_CATEGORIES[0],
+    limit: "",
+  });
   const [loading, setLoading] = useState(false);
   const { format, symbol } = useCurrency();
 

@@ -17,7 +17,12 @@ export default function ExpensesPage() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [form, setForm] = useState({ amount: "", category: EXPENSE_CATEGORIES[0], description: "", date: "" });
+  const [form, setForm] = useState<{
+    amount: string;
+    category: string;
+    description: string;
+    date: string;
+  }>({ amount: "", category: EXPENSE_CATEGORIES[0], description: "", date: "" });
   const [loading, setLoading] = useState(false);
   const { format, symbol } = useCurrency();
 
