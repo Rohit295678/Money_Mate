@@ -2,7 +2,6 @@
 import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import Sidebar from "@/components/layout/Sidebar";
-import MobileBottomNav from "@/components/layout/MobileBottomNav";
 
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -52,12 +51,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           <span className="font-bold text-emerald-600 text-lg">MoneyMate</span>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 pb-24 lg:pb-8">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           {children}
         </main>
-
-        {/* Bottom nav — mobile only */}
-        <MobileBottomNav />
       </div>
     </div>
   );
