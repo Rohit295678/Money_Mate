@@ -1,7 +1,5 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { corsPreflight, getUserId, jsonResponse, unauthorized } from "@/lib/api-auth";
 
 type DbBudget = {
   id: string;
@@ -25,23 +23,27 @@ function toApiShape(b: DbBudget) {
   };
 }
 
+export async function OPTIONS() {
+  return corsPreflight();
+}
+
 export async function GET(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId(req);
+  if (!userId) return unauthorized();
 
   const { searchParams } = new URL(req.url);
   const month = Number(searchParams.get("month") ?? new Date().getMonth() + 1);
   const year = Number(searchParams.get("year") ?? new Date().getFullYear());
 
   const budgets = await prisma.budget.findMany({
-    where: { userId: session.user.id, month, year },
+    where: { userId, month, year },
   });
-  return NextResponse.json(budgets.map(toApiShape));
+  return jsonResponse(budgets.map(toApiShape));
 }
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId(req);
+  if (!userId) return unauthorized();
 
   const { category, limit, month, year } = await req.json();
   const m = Number(month ?? new Date().getMonth() + 1);
@@ -50,7 +52,7 @@ export async function POST(req: Request) {
   const budget = await prisma.budget.upsert({
     where: {
       userId_category_month_year: {
-        userId: session.user.id,
+        userId,
         category,
         month: m,
         year: y,
@@ -58,26 +60,24 @@ export async function POST(req: Request) {
     },
     update: { limitAmount: Number(limit) },
     create: {
-      userId: session.user.id,
+      userId,
       category,
       limitAmount: Number(limit),
       month: m,
       year: y,
     },
   });
-  return NextResponse.json(toApiShape(budget));
+  return jsonResponse(toApiShape(budget));
 }
 
 export async function DELETE(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId(req);
+  if (!userId) return unauthorized();
 
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
-  if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
+  if (!id) return jsonResponse({ error: "ID required" }, { status: 400 });
 
-  await prisma.budget.deleteMany({
-    where: { id, userId: session.user.id },
-  });
-  return NextResponse.json({ success: true });
+  await prisma.budget.deleteMany({ where: { id, userId } });
+  return jsonResponse({ success: true });
 }

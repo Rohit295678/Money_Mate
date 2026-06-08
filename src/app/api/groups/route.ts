@@ -1,7 +1,5 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { corsPreflight, getUserId, jsonResponse, unauthorized } from "@/lib/api-auth";
 
 type RawMember = {
   id: string;
@@ -72,13 +70,17 @@ type RawSettlement = {
   date: Date;
 };
 
-export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function OPTIONS() {
+  return corsPreflight();
+}
+
+export async function GET(req: Request) {
+  const userId = await getUserId(req);
+  if (!userId) return unauthorized();
 
   // Return every group where the user has a GroupMember row.
   const groups = await prisma.group.findMany({
-    where: { members: { some: { userId: session.user.id } } },
+    where: { members: { some: { userId } } },
     orderBy: { createdAt: "desc" },
     include: {
       members: { include: { user: { select: { id: true, name: true, email: true } } } },
@@ -102,7 +104,7 @@ export async function GET() {
     name: g.name,
     user_id: g.userId,
     created_at: g.createdAt,
-    isOwner: g.userId === session.user.id,
+    isOwner: g.userId === userId,
     members: (g.members as unknown as RawMember[]).map(flattenMember),
     bills: (g.bills as unknown as RawBill[]).map(flattenBill),
     settlements: (g.settlements as unknown as RawSettlement[]).map((s) => ({
@@ -114,24 +116,24 @@ export async function GET() {
       date: s.date,
     })),
   }));
-  return NextResponse.json(result);
+  return jsonResponse(result);
 }
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId(req);
+  if (!userId) return unauthorized();
 
   const body = await req.json();
   const name: string = body.name;
   const memberEmails: string[] = Array.isArray(body.memberEmails) ? body.memberEmails : [];
 
-  if (!name?.trim()) return NextResponse.json({ error: "Group name required" }, { status: 400 });
+  if (!name?.trim()) return jsonResponse({ error: "Group name required" }, { status: 400 });
 
   const me = await prisma.user.findUnique({
-    where: { id: session.user.id },
+    where: { id: userId },
     select: { id: true, email: true },
   });
-  if (!me) return NextResponse.json({ error: "User not found" }, { status: 401 });
+  if (!me) return jsonResponse({ error: "User not found" }, { status: 401 });
 
   // Look up every requested email. Reject the whole request if any are unknown.
   const cleanEmails = Array.from(
@@ -153,7 +155,7 @@ export async function POST(req: Request) {
   const foundLowercase = new Set(foundUsers.map((u) => u.email.toLowerCase()));
   const unknown = cleanEmails.filter((e) => !foundLowercase.has(e));
   if (unknown.length > 0) {
-    return NextResponse.json(
+    return jsonResponse(
       { error: `Not registered users: ${unknown.join(", ")}` },
       { status: 400 }
     );
@@ -175,7 +177,7 @@ export async function POST(req: Request) {
     },
   });
 
-  return NextResponse.json(
+  return jsonResponse(
     {
       id: created.id,
       name: created.name,
@@ -190,20 +192,20 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId(req);
+  if (!userId) return unauthorized();
 
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
-  if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
+  if (!id) return jsonResponse({ error: "ID required" }, { status: 400 });
 
   // Any member of the group can delete it (per app spec).
   const member = await prisma.groupMember.findFirst({
-    where: { groupId: id, userId: session.user.id },
+    where: { groupId: id, userId },
     select: { id: true },
   });
-  if (!member) return NextResponse.json({ error: "Group not found" }, { status: 404 });
+  if (!member) return jsonResponse({ error: "Group not found" }, { status: 404 });
 
   await prisma.group.delete({ where: { id } });
-  return NextResponse.json({ success: true });
+  return jsonResponse({ success: true });
 }

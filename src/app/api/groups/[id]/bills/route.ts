@@ -1,7 +1,5 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { corsPreflight, getUserId, jsonResponse, unauthorized } from "@/lib/api-auth";
 
 type RawMember = {
   id: string;
@@ -66,9 +64,13 @@ async function assertGroupMember(groupId: string, userId: string) {
   });
 }
 
+export async function OPTIONS() {
+  return corsPreflight();
+}
+
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId(req);
+  if (!userId) return unauthorized();
 
   const { id: groupId } = await params;
   const body = await req.json();
@@ -81,15 +83,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     Array.isArray(body.splits) ? body.splits : undefined;
 
   if (!title?.trim() || amount === undefined || amount === null || !memberId)
-    return NextResponse.json({ error: "title, amount, memberId required" }, { status: 400 });
+    return jsonResponse({ error: "title, amount, memberId required" }, { status: 400 });
 
   const total = Number(amount);
   if (!Number.isFinite(total) || total <= 0)
-    return NextResponse.json({ error: "amount must be a positive number" }, { status: 400 });
+    return jsonResponse({ error: "amount must be a positive number" }, { status: 400 });
 
   // Auth: requester must belong to the group.
-  const me = await assertGroupMember(groupId, session.user.id);
-  if (!me) return NextResponse.json({ error: "Group not found" }, { status: 404 });
+  const me = await assertGroupMember(groupId, userId);
+  if (!me) return jsonResponse({ error: "Group not found" }, { status: 404 });
 
   // memberId (the payer) must also belong to this group.
   const payer = await prisma.groupMember.findFirst({
@@ -97,14 +99,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     select: { id: true },
   });
   if (!payer)
-    return NextResponse.json({ error: "Payer is not in this group" }, { status: 400 });
+    return jsonResponse({ error: "Payer is not in this group" }, { status: 400 });
 
   const groupMembers = await prisma.groupMember.findMany({
     where: { groupId },
     select: { id: true },
   });
   if (groupMembers.length === 0)
-    return NextResponse.json({ error: "Group has no members" }, { status: 400 });
+    return jsonResponse({ error: "Group has no members" }, { status: 400 });
 
   // Build the final list of splits. Either custom (validated) or equal among everyone.
   let splitsToCreate: Array<{ memberId: string; amount: number; settled: boolean }>;
@@ -115,19 +117,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const normalized: Array<{ memberId: string; amount: number }> = [];
     for (const s of customSplits) {
       if (typeof s.memberId !== "string" || !groupMemberIds.has(s.memberId))
-        return NextResponse.json(
+        return jsonResponse(
           { error: "splits contain a memberId that's not in this group" },
           { status: 400 }
         );
       if (seen.has(s.memberId))
-        return NextResponse.json(
+        return jsonResponse(
           { error: "splits contain duplicate memberId" },
           { status: 400 }
         );
       seen.add(s.memberId);
       const amt = Number(s.amount);
       if (!Number.isFinite(amt) || amt < 0)
-        return NextResponse.json(
+        return jsonResponse(
           { error: "split amounts must be non-negative numbers" },
           { status: 400 }
         );
@@ -136,7 +138,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     // Payer must be included in the split (per product rule: payer auto-included).
     if (!seen.has(memberId))
-      return NextResponse.json(
+      return jsonResponse(
         { error: "Payer must be included in the split" },
         { status: 400 }
       );
@@ -144,7 +146,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // Sum must match total within a small tolerance (handles float rounding).
     const sum = normalized.reduce((a, b) => a + b.amount, 0);
     if (Math.abs(sum - total) > 0.01)
-      return NextResponse.json(
+      return jsonResponse(
         { error: `Split amounts (${sum.toFixed(2)}) do not sum to total (${total.toFixed(2)})` },
         { status: 400 }
       );
@@ -181,43 +183,43 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     },
   });
 
-  return NextResponse.json(flattenBill(bill as unknown as RawBill), { status: 201 });
+  return jsonResponse(flattenBill(bill as unknown as RawBill), { status: 201 });
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId(req);
+  if (!userId) return unauthorized();
 
   const { id: groupId } = await params;
   const { splitId } = await req.json();
 
-  const me = await assertGroupMember(groupId, session.user.id);
-  if (!me) return NextResponse.json({ error: "Group not found" }, { status: 404 });
+  const me = await assertGroupMember(groupId, userId);
+  if (!me) return jsonResponse({ error: "Group not found" }, { status: 404 });
 
   const split = await prisma.billSplit.findFirst({
     where: { id: splitId, bill: { groupId } },
     select: { id: true },
   });
-  if (!split) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!split) return jsonResponse({ error: "Not found" }, { status: 404 });
 
   await prisma.billSplit.update({ where: { id: splitId }, data: { settled: true } });
-  return NextResponse.json({ success: true });
+  return jsonResponse({ success: true });
 }
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId(req);
+  if (!userId) return unauthorized();
 
   const { id: groupId } = await params;
   const { searchParams } = new URL(req.url);
   const billId = searchParams.get("billId");
-  if (!billId) return NextResponse.json({ error: "billId required" }, { status: 400 });
+  if (!billId) return jsonResponse({ error: "billId required" }, { status: 400 });
 
-  const me = await assertGroupMember(groupId, session.user.id);
-  if (!me) return NextResponse.json({ error: "Group not found" }, { status: 404 });
+  const me = await assertGroupMember(groupId, userId);
+  if (!me) return jsonResponse({ error: "Group not found" }, { status: 404 });
 
   const result = await prisma.bill.deleteMany({ where: { id: billId, groupId } });
   if (result.count === 0)
-    return NextResponse.json({ error: "Bill not found" }, { status: 404 });
-  return NextResponse.json({ success: true });
+    return jsonResponse({ error: "Bill not found" }, { status: 404 });
+  return jsonResponse({ success: true });
 }

@@ -1,17 +1,18 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { corsPreflight, getUserId, jsonResponse, unauthorized } from "@/lib/api-auth";
+
+export async function OPTIONS() {
+  return corsPreflight();
+}
 
 export async function GET(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId(req);
+  if (!userId) return unauthorized();
 
   const { searchParams } = new URL(req.url);
   const now = new Date();
   const month = Number(searchParams.get("month") ?? now.getMonth() + 1);
   const year = Number(searchParams.get("year") ?? now.getFullYear());
-  const userId = session.user.id;
 
   const start = new Date(year, month - 1, 1, 0, 0, 0, 0);
   const end = new Date(year, month, 0, 23, 59, 59, 999);
@@ -56,7 +57,7 @@ export async function GET(req: Request) {
     spent: spentByCategory[category] ?? 0,
   }));
 
-  return NextResponse.json({
+  return jsonResponse({
     totalSpent: expenses.reduce((s, e) => s + e.amount, 0),
     totalBudget: budgets.reduce((s, b) => s + b.limitAmount, 0),
     totalSaved: goals.reduce((s, g) => s + g.currentAmount, 0),

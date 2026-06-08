@@ -1,7 +1,5 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { corsPreflight, getUserId, jsonResponse, unauthorized } from "@/lib/api-auth";
 
 async function assertGroupMember(groupId: string, userId: string) {
   return prisma.groupMember.findFirst({
@@ -13,16 +11,11 @@ async function assertGroupMember(groupId: string, userId: string) {
 // Compute (from -> to) RAW direct debt for this pair, ignoring already-logged
 // settlements. This is: sum of unsettled bill_splits where `from` is the
 // debtor and `to` was the payer.
-//
-// We use this purely for overpay-prevention and the "auto-mark splits as
-// settled" pass — NOT for what the UI displays (the UI already gets full
-// data via /api/groups and computes optimal balances client-side).
 async function rawDirectDebt(
   groupId: string,
   fromMemberId: string,
   toMemberId: string
 ): Promise<number> {
-  // Splits where `to` paid and `from` is the debtor row
   const debtorSplits = await prisma.billSplit.findMany({
     where: {
       bill: { groupId, memberId: toMemberId },
@@ -33,7 +26,6 @@ async function rawDirectDebt(
   });
   const debtSum = debtorSplits.reduce((s, x) => s + x.amount, 0);
 
-  // Splits in the other direction (from paid, to is debtor) — net out
   const reverseSplits = await prisma.billSplit.findMany({
     where: {
       bill: { groupId, memberId: fromMemberId },
@@ -47,14 +39,18 @@ async function rawDirectDebt(
   return debtSum - reverseSum;
 }
 
+export async function OPTIONS() {
+  return corsPreflight();
+}
+
 // POST /api/groups/[id]/settlements
 // body: { fromMemberId, toMemberId, amount, note? }
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId(req);
+  if (!userId) return unauthorized();
 
   const { id: groupId } = await params;
   const body = await req.json();
@@ -64,25 +60,22 @@ export async function POST(
   const amount = Number(body.amount);
 
   if (!fromMemberId || !toMemberId)
-    return NextResponse.json({ error: "fromMemberId and toMemberId required" }, { status: 400 });
+    return jsonResponse({ error: "fromMemberId and toMemberId required" }, { status: 400 });
   if (fromMemberId === toMemberId)
-    return NextResponse.json({ error: "fromMemberId and toMemberId must differ" }, { status: 400 });
+    return jsonResponse({ error: "fromMemberId and toMemberId must differ" }, { status: 400 });
   if (!Number.isFinite(amount) || amount <= 0)
-    return NextResponse.json({ error: "amount must be a positive number" }, { status: 400 });
+    return jsonResponse({ error: "amount must be a positive number" }, { status: 400 });
 
-  // Auth: requester must be a group member.
-  const me = await assertGroupMember(groupId, session.user.id);
-  if (!me) return NextResponse.json({ error: "Group not found" }, { status: 404 });
+  const me = await assertGroupMember(groupId, userId);
+  if (!me) return jsonResponse({ error: "Group not found" }, { status: 404 });
 
-  // Both endpoints must belong to this group.
   const [fromOk, toOk] = await Promise.all([
     prisma.groupMember.findFirst({ where: { id: fromMemberId, groupId }, select: { id: true } }),
     prisma.groupMember.findFirst({ where: { id: toMemberId, groupId }, select: { id: true } }),
   ]);
   if (!fromOk || !toOk)
-    return NextResponse.json({ error: "Member is not in this group" }, { status: 400 });
+    return jsonResponse({ error: "Member is not in this group" }, { status: 400 });
 
-  // Compute current outstanding (raw direct debt − payments already logged for this pair).
   const raw = await rawDirectDebt(groupId, fromMemberId, toMemberId);
   const prevPayments = await prisma.settlement.aggregate({
     where: { groupId, fromMemberId, toMemberId },
@@ -94,9 +87,8 @@ export async function POST(
   });
   const outstanding = raw - (prevPayments._sum.amount ?? 0) + (reversePayments._sum.amount ?? 0);
 
-  // Block overpay (per spec). Allow tiny float slack.
   if (amount - outstanding > 0.01) {
-    return NextResponse.json(
+    return jsonResponse(
       {
         error:
           outstanding <= 0
@@ -107,8 +99,6 @@ export async function POST(
     );
   }
 
-  // Insert settlement and (best-effort) auto-mark direct splits as settled
-  // when their cumulative amount has been covered. Walk oldest splits first.
   const created = await prisma.$transaction(async (tx) => {
     const settlement = await tx.settlement.create({
       data: {
@@ -120,15 +110,12 @@ export async function POST(
       },
     });
 
-    // Total payments now covering this direction.
     const agg = await tx.settlement.aggregate({
       where: { groupId, fromMemberId, toMemberId },
       _sum: { amount: true },
     });
     const totalPaid = agg._sum.amount ?? 0;
 
-    // Direct splits where `to` paid the bill and `from` owes a share.
-    // Walk oldest-first; mark settled while running total <= totalPaid.
     const splits = await tx.billSplit.findMany({
       where: {
         bill: { groupId, memberId: toMemberId },
@@ -159,7 +146,7 @@ export async function POST(
     return settlement;
   });
 
-  return NextResponse.json(
+  return jsonResponse(
     {
       id: created.id,
       from_member_id: created.fromMemberId,
@@ -177,22 +164,22 @@ export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId(req);
+  if (!userId) return unauthorized();
 
   const { id: groupId } = await params;
   const { searchParams } = new URL(req.url);
   const settlementId = searchParams.get("settlementId");
   if (!settlementId)
-    return NextResponse.json({ error: "settlementId required" }, { status: 400 });
+    return jsonResponse({ error: "settlementId required" }, { status: 400 });
 
-  const me = await assertGroupMember(groupId, session.user.id);
-  if (!me) return NextResponse.json({ error: "Group not found" }, { status: 404 });
+  const me = await assertGroupMember(groupId, userId);
+  if (!me) return jsonResponse({ error: "Group not found" }, { status: 404 });
 
   const result = await prisma.settlement.deleteMany({
     where: { id: settlementId, groupId },
   });
   if (result.count === 0)
-    return NextResponse.json({ error: "Settlement not found" }, { status: 404 });
-  return NextResponse.json({ success: true });
+    return jsonResponse({ error: "Settlement not found" }, { status: 404 });
+  return jsonResponse({ success: true });
 }

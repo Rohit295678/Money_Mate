@@ -21,6 +21,9 @@ export async function middleware(request: NextRequest) {
   return NextResponse.next();
 }
 
+// Skip the middleware for everything under /api so each route can handle its
+// own auth (cookie session OR Authorization: Bearer JWT for the mobile app).
+// Static assets and Next internals also skipped.
 export const config = {
-  matcher: ["/((?!api/auth|api/register|_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
 };

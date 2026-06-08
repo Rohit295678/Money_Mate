@@ -1,14 +1,16 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { corsPreflight, getUserId, jsonResponse, unauthorized } from "@/lib/api-auth";
 
-export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function OPTIONS() {
+  return corsPreflight();
+}
+
+export async function GET(req: Request) {
+  const userId = await getUserId(req);
+  if (!userId) return unauthorized();
 
   const debts = await prisma.debt.findMany({
-    where: { userId: session.user.id },
+    where: { userId },
     orderBy: { createdAt: "desc" },
     include: {
       payments: {
@@ -17,20 +19,20 @@ export async function GET() {
       },
     },
   });
-  return NextResponse.json(debts);
+  return jsonResponse(debts);
 }
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId(req);
+  if (!userId) return unauthorized();
 
   const { name, totalAmount, interestRate, minimumPayment, dueDate } = await req.json();
   if (!name || !totalAmount)
-    return NextResponse.json({ error: "Name and total amount required" }, { status: 400 });
+    return jsonResponse({ error: "Name and total amount required" }, { status: 400 });
 
   const debt = await prisma.debt.create({
     data: {
-      userId: session.user.id,
+      userId,
       name,
       totalAmount: Number(totalAmount),
       interestRate: Number(interestRate ?? 0),
@@ -38,22 +40,22 @@ export async function POST(req: Request) {
       dueDate: dueDate ? new Date(dueDate) : null,
     },
   });
-  return NextResponse.json(debt, { status: 201 });
+  return jsonResponse(debt, { status: 201 });
 }
 
 export async function PUT(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId(req);
+  if (!userId) return unauthorized();
 
   const { debtId, amount } = await req.json();
   if (!debtId || !amount)
-    return NextResponse.json({ error: "Debt ID and amount required" }, { status: 400 });
+    return jsonResponse({ error: "Debt ID and amount required" }, { status: 400 });
 
   const owned = await prisma.debt.findFirst({
-    where: { id: debtId, userId: session.user.id },
+    where: { id: debtId, userId },
     select: { id: true },
   });
-  if (!owned) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!owned) return jsonResponse({ error: "Not found" }, { status: 404 });
 
   const [, updated] = await prisma.$transaction([
     prisma.debtPayment.create({
@@ -65,19 +67,17 @@ export async function PUT(req: Request) {
     }),
   ]);
 
-  return NextResponse.json({ debt: updated });
+  return jsonResponse({ debt: updated });
 }
 
 export async function DELETE(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId(req);
+  if (!userId) return unauthorized();
 
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
-  if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
+  if (!id) return jsonResponse({ error: "ID required" }, { status: 400 });
 
-  await prisma.debt.deleteMany({
-    where: { id, userId: session.user.id },
-  });
-  return NextResponse.json({ success: true });
+  await prisma.debt.deleteMany({ where: { id, userId } });
+  return jsonResponse({ success: true });
 }

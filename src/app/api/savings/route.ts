@@ -1,14 +1,16 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { corsPreflight, getUserId, jsonResponse, unauthorized } from "@/lib/api-auth";
 
-export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function OPTIONS() {
+  return corsPreflight();
+}
+
+export async function GET(req: Request) {
+  const userId = await getUserId(req);
+  if (!userId) return unauthorized();
 
   const goals = await prisma.savingsGoal.findMany({
-    where: { userId: session.user.id },
+    where: { userId },
     orderBy: { createdAt: "desc" },
     include: {
       contributions: {
@@ -17,41 +19,41 @@ export async function GET() {
       },
     },
   });
-  return NextResponse.json(goals);
+  return jsonResponse(goals);
 }
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId(req);
+  if (!userId) return unauthorized();
 
   const { name, targetAmount, deadline } = await req.json();
   if (!name || !targetAmount)
-    return NextResponse.json({ error: "Name and target required" }, { status: 400 });
+    return jsonResponse({ error: "Name and target required" }, { status: 400 });
 
   const goal = await prisma.savingsGoal.create({
     data: {
-      userId: session.user.id,
+      userId,
       name,
       targetAmount: Number(targetAmount),
       deadline: deadline ? new Date(deadline) : null,
     },
   });
-  return NextResponse.json(goal, { status: 201 });
+  return jsonResponse(goal, { status: 201 });
 }
 
 export async function PUT(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId(req);
+  if (!userId) return unauthorized();
 
   const { goalId, amount, note } = await req.json();
   if (!goalId || !amount)
-    return NextResponse.json({ error: "Goal ID and amount required" }, { status: 400 });
+    return jsonResponse({ error: "Goal ID and amount required" }, { status: 400 });
 
   const owned = await prisma.savingsGoal.findFirst({
-    where: { id: goalId, userId: session.user.id },
+    where: { id: goalId, userId },
     select: { id: true },
   });
-  if (!owned) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!owned) return jsonResponse({ error: "Not found" }, { status: 404 });
 
   const [, updated] = await prisma.$transaction([
     prisma.savingsContribution.create({
@@ -63,19 +65,17 @@ export async function PUT(req: Request) {
     }),
   ]);
 
-  return NextResponse.json({ goal: updated });
+  return jsonResponse({ goal: updated });
 }
 
 export async function DELETE(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId(req);
+  if (!userId) return unauthorized();
 
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
-  if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
+  if (!id) return jsonResponse({ error: "ID required" }, { status: 400 });
 
-  await prisma.savingsGoal.deleteMany({
-    where: { id, userId: session.user.id },
-  });
-  return NextResponse.json({ success: true });
+  await prisma.savingsGoal.deleteMany({ where: { id, userId } });
+  return jsonResponse({ success: true });
 }
