@@ -6,7 +6,7 @@ type RawMember = {
   groupId: string;
   userId: string;
   joinedAt: Date;
-  user: { id: string; name: string | null; email: string };
+  user: { id: string; name: string | null; email: string; upiId: string | null };
 };
 
 type RawSplit = {
@@ -37,6 +37,7 @@ function flattenMember(m: RawMember) {
     user_id: m.userId,
     name: m.user.name ?? m.user.email.split("@")[0],
     email: m.user.email,
+    upi_id: m.user.upiId,
   };
 }
 
@@ -67,6 +68,8 @@ type RawSettlement = {
   toMemberId: string;
   amount: number;
   note: string | null;
+  method: string | null;
+  txnRef: string | null;
   date: Date;
 };
 
@@ -83,14 +86,14 @@ export async function GET(req: Request) {
     where: { members: { some: { userId } } },
     orderBy: { createdAt: "desc" },
     include: {
-      members: { include: { user: { select: { id: true, name: true, email: true } } } },
+      members: { include: { user: { select: { id: true, name: true, email: true, upiId: true } } } },
       bills: {
         orderBy: { date: "desc" },
         include: {
-          paidBy: { include: { user: { select: { id: true, name: true, email: true } } } },
+          paidBy: { include: { user: { select: { id: true, name: true, email: true, upiId: true } } } },
           splits: {
             include: {
-              member: { include: { user: { select: { id: true, name: true, email: true } } } },
+              member: { include: { user: { select: { id: true, name: true, email: true, upiId: true } } } },
             },
           },
         },
@@ -113,6 +116,8 @@ export async function GET(req: Request) {
       to_member_id: s.toMemberId,
       amount: s.amount,
       note: s.note,
+      method: s.method,
+      txn_ref: s.txnRef,
       date: s.date,
     })),
   }));
@@ -173,7 +178,7 @@ export async function POST(req: Request) {
       },
     },
     include: {
-      members: { include: { user: { select: { id: true, name: true, email: true } } } },
+      members: { include: { user: { select: { id: true, name: true, email: true, upiId: true } } } },
     },
   });
 

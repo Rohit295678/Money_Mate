@@ -18,6 +18,7 @@ model User {
   name      String?
   email     String   @unique
   password  String
+  upiId     String?  @map("upi_id")
   createdAt DateTime @default(now()) @map("created_at")
 
   expenses     Expense[]
@@ -157,6 +158,10 @@ model Settlement {
   toMemberId   String   @map("to_member_id")
   amount       Float
   note         String?
+  // "upi" | "cash" | "other" | null (legacy rows have no method recorded).
+  method       String?
+  // Optional reference (e.g. UPI txn ID returned by the payer's UPI app).
+  txnRef       String?  @map("txn_ref")
   date         DateTime @default(now())
 
   group Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)

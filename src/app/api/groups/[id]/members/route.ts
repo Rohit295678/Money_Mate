@@ -28,7 +28,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const target = email.trim().toLowerCase();
   const user = await prisma.user.findFirst({
     where: { email: { equals: target, mode: "insensitive" } },
-    select: { id: true, name: true, email: true },
+    select: { id: true, name: true, email: true, upiId: true },
   });
   if (!user)
     return jsonResponse(
@@ -52,6 +52,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       user_id: user.id,
       name: user.name ?? user.email.split("@")[0],
       email: user.email,
+      upi_id: user.upiId,
     },
     { status: 201 }
   );

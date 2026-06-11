@@ -28,10 +28,11 @@ export async function GET(req: Request) {
         },
       ],
     },
-    select: { id: true, name: true, email: true },
+    select: { id: true, name: true, email: true, upiId: true },
     take: 10,
     orderBy: { email: "asc" },
   });
 
-  return jsonResponse(users);
+  // Surface the snake_case `upi_id` to match the rest of the API contract.
+  return jsonResponse(users.map((u) => ({ id: u.id, name: u.name, email: u.email, upi_id: u.upiId })));
 }

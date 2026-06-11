@@ -58,6 +58,12 @@ export async function POST(
   const toMemberId: string | undefined = body.toMemberId;
   const note: string | undefined = body.note;
   const amount = Number(body.amount);
+  // method is one of: "upi" | "cash" | "other" | undefined (legacy clients).
+  const rawMethod = typeof body.method === "string" ? body.method.trim().toLowerCase() : undefined;
+  const method =
+    rawMethod === "upi" || rawMethod === "cash" || rawMethod === "other" ? rawMethod : undefined;
+  const txnRefRaw = typeof body.txnRef === "string" ? body.txnRef.trim() : undefined;
+  const txnRef = txnRefRaw && txnRefRaw.length > 0 ? txnRefRaw.slice(0, 128) : undefined;
 
   if (!fromMemberId || !toMemberId)
     return jsonResponse({ error: "fromMemberId and toMemberId required" }, { status: 400 });
@@ -107,6 +113,8 @@ export async function POST(
         toMemberId,
         amount,
         note: note?.trim() || null,
+        method: method ?? null,
+        txnRef: txnRef ?? null,
       },
     });
 
@@ -153,6 +161,8 @@ export async function POST(
       to_member_id: created.toMemberId,
       amount: created.amount,
       note: created.note,
+      method: created.method,
+      txn_ref: created.txnRef,
       date: created.date,
     },
     { status: 201 }
