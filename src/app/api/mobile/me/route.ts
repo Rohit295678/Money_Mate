@@ -13,7 +13,7 @@ export async function GET(req: Request) {
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, name: true, email: true, upiId: true },
+    select: { id: true, name: true, email: true, upiId: true, image: true },
   });
   if (!user) return unauthorized();
 
@@ -65,7 +65,7 @@ export async function PATCH(req: Request) {
   const user = await prisma.user.update({
     where: { id: userId },
     data,
-    select: { id: true, name: true, email: true, upiId: true },
+    select: { id: true, name: true, email: true, upiId: true, image: true },
   });
 
   return jsonResponse({ user });

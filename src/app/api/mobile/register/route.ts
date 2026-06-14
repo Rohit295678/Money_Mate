@@ -34,7 +34,7 @@ export async function POST(req: Request) {
   const hashed = await bcrypt.hash(password, 12);
   const user = await prisma.user.create({
     data: { name: name || null, email, password: hashed },
-    select: { id: true, name: true, email: true },
+    select: { id: true, name: true, email: true, upiId: true },
   });
 
   const token = signMobileToken({ sub: user.id, email: user.email });

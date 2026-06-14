@@ -17,8 +17,15 @@ model User {
   id        String   @id @default(cuid())
   name      String?
   email     String   @unique
-  password  String
+  // Nullable now: Google-only users have no password set. Email/password
+  // users still get a bcrypt hash; we just don't require it for everyone.
+  password  String?
   upiId     String?  @map("upi_id")
+  // Google's stable account identifier. Set when a user signs in via Google.
+  // Indexed (unique) so we can look users up by Google ID directly.
+  googleId  String?  @unique @map("google_id")
+  // Cached profile picture URL from Google (or wherever else later).
+  image     String?
   createdAt DateTime @default(now()) @map("created_at")
 
   expenses     Expense[]

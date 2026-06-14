@@ -27,6 +27,15 @@ export async function POST(req: Request) {
     return jsonResponse({ error: "Invalid email or password" }, { status: 401 });
   }
 
+  // Google-only users don't have a password set. Tell them where to go
+  // instead of returning a generic "wrong password" message.
+  if (!user.password) {
+    return jsonResponse(
+      { error: "This account uses Google sign-in. Tap \"Continue with Google\" instead." },
+      { status: 400 }
+    );
+  }
+
   const ok = await bcrypt.compare(password, user.password);
   if (!ok) {
     return jsonResponse({ error: "Invalid email or password" }, { status: 401 });
@@ -35,6 +44,6 @@ export async function POST(req: Request) {
   const token = signMobileToken({ sub: user.id, email: user.email });
   return jsonResponse({
     token,
-    user: { id: user.id, name: user.name, email: user.email },
+    user: { id: user.id, name: user.name, email: user.email, upiId: user.upiId },
   });
 }
