@@ -35,6 +35,9 @@ model User {
   ownedGroups  Group[]       @relation("GroupOwner")
   memberships  GroupMember[]
 
+  invitationsSent     GroupInvitation[] @relation("InvitationsSent")
+  invitationsReceived GroupInvitation[] @relation("InvitationsReceived")
+
   @@map("users")
 }
 
@@ -129,12 +132,35 @@ model Group {
   name      String
   createdAt DateTime @default(now()) @map("created_at")
 
-  owner       User          @relation("GroupOwner", fields: [userId], references: [id], onDelete: Cascade)
+  owner       User              @relation("GroupOwner", fields: [userId], references: [id], onDelete: Cascade)
   members     GroupMember[]
   bills       Bill[]
   settlements Settlement[]
+  invitations GroupInvitation[]
 
   @@map("bill_groups")
+}
+
+// A pending/accepted/declined invitation to join a group. A user becomes a
+// GroupMember only after they accept. One row per (group, invitee); re-inviting
+// a declined user just flips the same row back to "pending".
+model GroupInvitation {
+  id          String    @id @default(cuid())
+  groupId     String    @map("group_id")
+  inviterId   String    @map("inviter_id")
+  inviteeId   String    @map("invitee_id")
+  status      String    @default("pending") // pending | accepted | declined
+  token       String    @unique @default(cuid())
+  createdAt   DateTime  @default(now()) @map("created_at")
+  respondedAt DateTime? @map("responded_at")
+
+  group   Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  inviter User  @relation("InvitationsSent", fields: [inviterId], references: [id], onDelete: Cascade)
+  invitee User  @relation("InvitationsReceived", fields: [inviteeId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, inviteeId])
+  @@index([inviteeId, status])
+  @@map("group_invitations")
 }
 
 // Each row links a registered User to a Group. Bill payers and splits

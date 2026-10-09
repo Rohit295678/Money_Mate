@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { corsPreflight, getUserId, jsonResponse, unauthorized } from "@/lib/api-auth";
+import { notifyInvitees } from "@/lib/email";
 
 async function assertGroupMember(groupId: string, userId: string) {
   return prisma.groupMember.findFirst({
@@ -13,6 +14,7 @@ export async function OPTIONS() {
 }
 
 // POST /api/groups/[id]/members  body: { email: "alice@example.com" }
+// Instead of adding directly, this now sends an invitation the user must accept.
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const userId = await getUserId(req);
   if (!userId) return unauthorized();
@@ -28,7 +30,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const target = email.trim().toLowerCase();
   const user = await prisma.user.findFirst({
     where: { email: { equals: target, mode: "insensitive" } },
-    select: { id: true, name: true, email: true, upiId: true },
+    select: { id: true, name: true, email: true },
   });
   if (!user)
     return jsonResponse(
@@ -43,16 +45,31 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (existing)
     return jsonResponse({ error: "Already a member" }, { status: 409 });
 
-  const member = await prisma.groupMember.create({
-    data: { groupId, userId: user.id },
+  const [group, inviter] = await Promise.all([
+    prisma.group.findUnique({ where: { id: groupId }, select: { name: true } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { name: true } }),
+  ]);
+
+  // Upsert the invitation: a previously declined one is flipped back to pending.
+  const invitation = await prisma.groupInvitation.upsert({
+    where: { groupId_inviteeId: { groupId, inviteeId: user.id } },
+    update: { status: "pending", inviterId: userId, respondedAt: null },
+    create: { groupId, inviteeId: user.id, inviterId: userId },
+    select: { id: true, status: true },
   });
+
+  await notifyInvitees(inviter?.name ?? null, group?.name ?? "a group", [user.email]);
+
   return jsonResponse(
     {
-      id: member.id,
-      user_id: user.id,
-      name: user.name ?? user.email.split("@")[0],
-      email: user.email,
-      upi_id: user.upiId,
+      invited: true,
+      invitation: {
+        id: invitation.id,
+        user_id: user.id,
+        name: user.name ?? user.email.split("@")[0],
+        email: user.email,
+        status: invitation.status,
+      },
     },
     { status: 201 }
   );

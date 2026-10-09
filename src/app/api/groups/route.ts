@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { corsPreflight, getUserId, jsonResponse, unauthorized } from "@/lib/api-auth";
+import { notifyInvitees } from "@/lib/email";
 
 type RawMember = {
   id: string;
@@ -73,6 +74,23 @@ type RawSettlement = {
   date: Date;
 };
 
+type RawInvitation = {
+  id: string;
+  status: string;
+  invitee: { id: string; name: string | null; email: string };
+};
+
+// Pending invitees shown alongside real members, so the UI can render "pending".
+function flattenInvite(inv: RawInvitation) {
+  return {
+    id: inv.id,
+    user_id: inv.invitee.id,
+    name: inv.invitee.name ?? inv.invitee.email.split("@")[0],
+    email: inv.invitee.email,
+    status: inv.status,
+  };
+}
+
 export async function OPTIONS() {
   return corsPreflight();
 }
@@ -99,6 +117,10 @@ export async function GET(req: Request) {
         },
       },
       settlements: { orderBy: { date: "desc" } },
+      invitations: {
+        where: { status: "pending" },
+        include: { invitee: { select: { id: true, name: true, email: true } } },
+      },
     },
   });
 
@@ -120,6 +142,7 @@ export async function GET(req: Request) {
       txn_ref: s.txnRef,
       date: s.date,
     })),
+    pending_invites: (g.invitations as unknown as RawInvitation[]).map(flattenInvite),
   }));
   return jsonResponse(result);
 }
@@ -136,7 +159,7 @@ export async function POST(req: Request) {
 
   const me = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, email: true },
+    select: { id: true, email: true, name: true },
   });
   if (!me) return jsonResponse({ error: "User not found" }, { status: 401 });
 
@@ -166,21 +189,32 @@ export async function POST(req: Request) {
     );
   }
 
-  // Creator is auto-included; dedupe just in case.
-  const userIdsForGroup = Array.from(new Set([me.id, ...foundUsers.map((u) => u.id)]));
-
+  // Only the creator joins immediately. Everyone else gets an invitation they
+  // must accept before becoming a member.
   const created = await prisma.group.create({
     data: {
       userId: me.id,
       name: name.trim(),
-      members: {
-        create: userIdsForGroup.map((uid) => ({ userId: uid })),
+      members: { create: [{ userId: me.id }] },
+      invitations: {
+        create: foundUsers.map((u) => ({ inviterId: me.id, inviteeId: u.id })),
       },
     },
     include: {
       members: { include: { user: { select: { id: true, name: true, email: true, upiId: true } } } },
+      invitations: {
+        where: { status: "pending" },
+        include: { invitee: { select: { id: true, name: true, email: true } } },
+      },
     },
   });
+
+  // Fire off invitation emails (non-blocking failures: in-app invites still work).
+  await notifyInvitees(
+    me.name,
+    created.name,
+    foundUsers.map((u) => u.email)
+  );
 
   return jsonResponse(
     {
@@ -191,6 +225,8 @@ export async function POST(req: Request) {
       isOwner: true,
       members: (created.members as unknown as RawMember[]).map(flattenMember),
       bills: [],
+      settlements: [],
+      pending_invites: (created.invitations as unknown as RawInvitation[]).map(flattenInvite),
     },
     { status: 201 }
   );
