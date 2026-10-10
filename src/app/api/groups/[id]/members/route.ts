@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { corsPreflight, getUserId, jsonResponse, unauthorized } from "@/lib/api-auth";
 import { notifyInvitees } from "@/lib/email";
+import { groupInviteMessage, nameOf, notify } from "@/lib/notify";
 
 async function assertGroupMember(groupId: string, userId: string) {
   return prisma.groupMember.findFirst({
@@ -47,7 +48,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const [group, inviter] = await Promise.all([
     prisma.group.findUnique({ where: { id: groupId }, select: { name: true } }),
-    prisma.user.findUnique({ where: { id: userId }, select: { name: true } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } }),
   ]);
 
   // Upsert the invitation: a previously declined one is flipped back to pending.
@@ -59,6 +60,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   });
 
   await notifyInvitees(inviter?.name ?? null, group?.name ?? "a group", [user.email]);
+  notify([
+    groupInviteMessage(user.id, nameOf(inviter), { id: groupId, name: group?.name ?? "a group" }),
+  ]);
 
   return jsonResponse(
     {
@@ -110,5 +114,22 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     );
 
   await prisma.groupMember.delete({ where: { id: memberId } });
+
+  // Leaving a group yourself isn't news to you; being removed by someone is.
+  if (target.userId !== userId) {
+    const [groupInfo, actor] = await Promise.all([
+      prisma.group.findUnique({ where: { id: groupId }, select: { name: true } }),
+      prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } }),
+    ]);
+    notify([
+      {
+        userId: target.userId,
+        type: "member_removed",
+        title: "Removed from group",
+        body: `${nameOf(actor)} removed you from "${groupInfo?.name ?? "a group"}".`,
+        groupId,
+      },
+    ]);
+  }
   return jsonResponse({ success: true });
 }

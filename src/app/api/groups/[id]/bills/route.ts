@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { corsPreflight, getUserId, jsonResponse, unauthorized } from "@/lib/api-auth";
+import { amountText, nameOf, notify } from "@/lib/notify";
 
 type RawMember = {
   id: string;
@@ -174,6 +175,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       splits: { create: splitsToCreate },
     },
     include: {
+      group: { select: { name: true } },
       paidBy: { include: { user: { select: { id: true, name: true, email: true } } } },
       splits: {
         include: {
@@ -182,6 +184,28 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       },
     },
   });
+
+  // Tell everyone with a stake in the bill (except whoever added it).
+  const actor = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { name: true, email: true },
+  });
+  const actorName = nameOf(actor);
+  const totalText = amountText(total);
+  notify(
+    bill.splits
+      .filter((s) => s.member.userId !== userId && (s.amount > 0 || s.memberId === memberId))
+      .map((s) => ({
+        userId: s.member.userId,
+        type: "bill_added" as const,
+        title: `New bill in ${bill.group.name}`,
+        body:
+          s.memberId === memberId
+            ? `${actorName} added "${bill.title}" (${totalText}), paid by you.`
+            : `${actorName} added "${bill.title}" (${totalText}). Your share: ${amountText(s.amount)}.`,
+        groupId,
+      }))
+  );
 
   return jsonResponse(flattenBill(bill as unknown as RawBill), { status: 201 });
 }

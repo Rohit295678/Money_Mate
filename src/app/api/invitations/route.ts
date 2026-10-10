@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { corsPreflight, getUserId, jsonResponse, unauthorized } from "@/lib/api-auth";
+import { nameOf, notify } from "@/lib/notify";
 
 export async function OPTIONS() {
   return corsPreflight();
@@ -42,7 +43,13 @@ export async function POST(req: Request) {
   // Must be a pending invite addressed to this user.
   const invite = await prisma.groupInvitation.findFirst({
     where: { id, inviteeId: userId, status: "pending" },
-    select: { id: true, groupId: true },
+    select: {
+      id: true,
+      groupId: true,
+      inviterId: true,
+      group: { select: { name: true } },
+      invitee: { select: { name: true, email: true } },
+    },
   });
   if (!invite) return jsonResponse({ error: "Invitation not found" }, { status: 404 });
 
@@ -67,5 +74,14 @@ export async function POST(req: Request) {
     }),
   ]);
 
+  notify([
+    {
+      userId: invite.inviterId,
+      type: "invite_accepted",
+      title: "Invite accepted",
+      body: `${nameOf(invite.invitee)} joined "${invite.group.name}".`,
+      groupId: invite.groupId,
+    },
+  ]);
   return jsonResponse({ success: true, status: "accepted", group_id: invite.groupId });
 }

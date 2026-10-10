@@ -38,7 +38,43 @@ model User {
   invitationsSent     GroupInvitation[] @relation("InvitationsSent")
   invitationsReceived GroupInvitation[] @relation("InvitationsReceived")
 
+  pushTokens    PushToken[]
+  notifications Notification[]
+
   @@map("users")
+}
+
+// One row per device that registered for push. A token belongs to exactly one
+// user at a time; signing in as someone else on the same phone re-assigns it.
+model PushToken {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  token     String   @unique // Expo push token: ExponentPushToken[...]
+  platform  String? // "android" | "ios"
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_tokens")
+}
+
+// In-app notification inbox. Every push we send is also stored here, so the
+// bell works even when push delivery fails (or isn't configured yet).
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  type      String // see NotificationType in src/lib/notify.ts
+  title     String
+  body      String
+  groupId   String?  @map("group_id")
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read, createdAt])
+  @@map("notifications")
 }
 
 model Expense {

@@ -1,5 +1,12 @@
 import { prisma } from "@/lib/db";
 import { corsPreflight, getUserId, jsonResponse, unauthorized } from "@/lib/api-auth";
+import { amountText, nameOf, notify, type NotifyMessage } from "@/lib/notify";
+
+const MEMBER_WITH_USER = {
+  id: true,
+  userId: true,
+  user: { select: { name: true, email: true } },
+} as const;
 
 async function assertGroupMember(groupId: string, userId: string) {
   return prisma.groupMember.findFirst({
@@ -123,8 +130,8 @@ export async function POST(
   if (!me) return jsonResponse({ error: "Group not found" }, { status: 404 });
 
   const [fromOk, toOk] = await Promise.all([
-    prisma.groupMember.findFirst({ where: { id: fromMemberId, groupId }, select: { id: true } }),
-    prisma.groupMember.findFirst({ where: { id: toMemberId, groupId }, select: { id: true } }),
+    prisma.groupMember.findFirst({ where: { id: fromMemberId, groupId }, select: MEMBER_WITH_USER }),
+    prisma.groupMember.findFirst({ where: { id: toMemberId, groupId }, select: MEMBER_WITH_USER }),
   ]);
   if (!fromOk || !toOk)
     return jsonResponse({ error: "Member is not in this group" }, { status: 400 });
@@ -191,6 +198,34 @@ export async function POST(
 
     return settlement;
   });
+
+  // Notify both sides of the payment, minus whoever recorded it.
+  const [groupInfo, actor] = await Promise.all([
+    prisma.group.findUnique({ where: { id: groupId }, select: { name: true } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } }),
+  ]);
+  const groupName = groupInfo?.name ?? "a group";
+  const amt = amountText(amount);
+  const messages: NotifyMessage[] = [];
+  if (toOk.userId !== userId) {
+    messages.push({
+      userId: toOk.userId,
+      type: "settlement_added",
+      title: "Payment received",
+      body: `${nameOf(fromOk.user)} paid you ${amt} in "${groupName}".`,
+      groupId,
+    });
+  }
+  if (fromOk.userId !== userId) {
+    messages.push({
+      userId: fromOk.userId,
+      type: "settlement_added",
+      title: "Payment recorded",
+      body: `${nameOf(actor)} recorded your payment of ${amt} to ${nameOf(toOk.user)} in "${groupName}".`,
+      groupId,
+    });
+  }
+  notify(messages);
 
   return jsonResponse(
     {

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { corsPreflight, getUserId, jsonResponse, unauthorized } from "@/lib/api-auth";
 import { notifyInvitees } from "@/lib/email";
+import { groupInviteMessage, nameOf, notify } from "@/lib/notify";
 
 type RawMember = {
   id: string;
@@ -215,6 +216,7 @@ export async function POST(req: Request) {
     created.name,
     foundUsers.map((u) => u.email)
   );
+  notify(foundUsers.map((u) => groupInviteMessage(u.id, nameOf(me), created)));
 
   return jsonResponse(
     {
