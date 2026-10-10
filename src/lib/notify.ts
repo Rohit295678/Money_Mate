@@ -63,16 +63,17 @@ export function notify(messages: NotifyMessage[]): void {
 
 async function deliver(messages: NotifyMessage[]): Promise<void> {
   try {
-    await prisma.notification.createMany({
-      data: messages.map(({ userId, type, title, body, groupId }) => ({
-        userId,
-        type,
-        title,
-        body,
-        groupId: groupId ?? null,
-      })),
-    });
-    await sendPush(messages);
+    // Individual creates (not createMany) so we get ids back in message order;
+    // the app uses the id to mark the notification read when the push is tapped.
+    const rows = await prisma.$transaction(
+      messages.map(({ userId, type, title, body, groupId }) =>
+        prisma.notification.create({
+          data: { userId, type, title, body, groupId: groupId ?? null },
+          select: { id: true },
+        })
+      )
+    );
+    await sendPush(messages.map((m, i) => ({ ...m, id: rows[i].id })));
   } catch (err) {
     console.error("[notify] delivery failed:", err);
   }
@@ -84,14 +85,14 @@ interface ExpoMessage {
   body: string;
   sound: "default";
   channelId: string;
-  data: { type: NotificationType; groupId: string | null };
+  data: { notificationId: string; type: NotificationType; groupId: string | null };
 }
 
 type ExpoTicket =
   | { status: "ok"; id: string }
   | { status: "error"; message: string; details?: { error?: string } };
 
-async function sendPush(messages: NotifyMessage[]): Promise<void> {
+async function sendPush(messages: (NotifyMessage & { id: string })[]): Promise<void> {
   const userIds = [...new Set(messages.map((m) => m.userId))];
   const tokens = await prisma.pushToken.findMany({
     where: { userId: { in: userIds } },
@@ -108,7 +109,7 @@ async function sendPush(messages: NotifyMessage[]): Promise<void> {
         body: m.body,
         sound: "default" as const,
         channelId: "default", // must match the channel the app creates
-        data: { type: m.type, groupId: m.groupId ?? null },
+        data: { notificationId: m.id, type: m.type, groupId: m.groupId ?? null },
       }))
   );
 
